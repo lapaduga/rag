@@ -33,6 +33,7 @@ async function loadStats() {
 
 async function startIndexing() {
   const strategy = document.getElementById('strategy').value;
+  const maxFiles = parseInt(document.getElementById('maxFiles').value, 10) || 0;
   const btn = document.getElementById('btn-index');
   const progressBar = document.getElementById('progress-bar');
   const progressFill = document.getElementById('progress-fill');
@@ -72,7 +73,7 @@ async function startIndexing() {
   try {
     const res = await apiFetch('/index', {
       method: 'POST',
-      body: JSON.stringify({ path: 'C:\\defined\\front', strategy }),
+      body: JSON.stringify({ path: 'C:\\defined\\front', strategy, maxFiles }),
     });
     const data = res.data;
 

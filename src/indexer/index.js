@@ -19,7 +19,7 @@ export class Indexer {
     return this.status;
   }
 
-  async runIndexing(rootPath, strategy = 'fixed') {
+  async runIndexing(rootPath, strategy = 'fixed', maxFiles) {
     if (this.status.running) {
       throw new Error('Индексация уже выполняется');
     }
@@ -28,7 +28,7 @@ export class Indexer {
     this.chunker = new Chunker(strategy);
 
     try {
-      const files = await this._scanFiles(rootPath);
+      const files = await this._scanFiles(rootPath, maxFiles);
       this.status.totalFiles = files.length;
       this.status.phase = 'indexing';
       this.status.message = `Индексация ${files.length} файлов...`;
@@ -90,15 +90,22 @@ export class Indexer {
     return results;
   }
 
-  async _scanFiles(rootPath) {
+  async _scanFiles(rootPath, maxFilesOverride) {
     const files = [];
     const allowedExt = config.documents.allowedExtensions;
-    const maxFiles = config.documents.maxFiles;
+    const skipExt = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.ico', '.webp',
+                     '.mp4', '.avi', '.mov', '.mkv', '.webm',
+                     '.mp3', '.wav', '.ogg', '.flac',
+                     '.zip', '.tar', '.gz', '.rar', '.7z',
+                     '.woff', '.woff2', '.ttf', '.eot',
+                     '.exe', '.dll', '.so', '.dylib',
+                     '.pdf', '.doc', '.docx', '.xls', '.xlsx',
+                     '.map', '.pyc'];
+    const maxFiles = maxFilesOverride !== undefined ? maxFilesOverride : config.documents.maxFiles;
     const gitignoreRules = this._loadGitignoreRules(rootPath);
     let dirCount = 0;
 
     const scan = async (dir) => {
-      if (files.length >= maxFiles) return;
       dirCount++;
       if (dirCount % 25 === 0) {
         this.status.message = `Сканирование: ${dir.replace(/\\/g, '/').split('/').slice(-2).join('/')}`;
@@ -112,7 +119,7 @@ export class Indexer {
       }
 
       for (const entry of entries) {
-        if (files.length >= maxFiles) break;
+        if (maxFiles > 0 && files.length >= maxFiles) break;
         const fullPath = join(dir, entry.name);
 
         if (entry.isDirectory()) {
@@ -122,6 +129,7 @@ export class Indexer {
         } else if (entry.isFile()) {
           const ext = extname(entry.name).toLowerCase();
           if (!allowedExt.includes(ext)) continue;
+          if (skipExt.includes(ext)) continue;
           if (this._isIgnored(entry.name, fullPath, false, gitignoreRules)) continue;
           try {
             const stat = statSync(fullPath);

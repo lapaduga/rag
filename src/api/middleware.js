@@ -9,12 +9,15 @@ export function errorHandler(err, req, res, _next) {
 }
 
 export function validateIndexRequest(req, res, next) {
-  const { path: docPath, strategy } = req.body;
+  const { path: docPath, strategy, maxFiles } = req.body;
   if (!docPath) {
     return res.status(400).json({ error: true, message: 'Поле "path" обязательно' });
   }
   if (strategy && !['fixed', 'semantic'].includes(strategy)) {
     return res.status(400).json({ error: true, message: 'Стратегия должна быть "fixed" или "semantic"' });
+  }
+  if (maxFiles !== undefined && (typeof maxFiles !== 'number' || maxFiles < 0)) {
+    return res.status(400).json({ error: true, message: 'maxFiles должен быть числом >= 0' });
   }
   next();
 }

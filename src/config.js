@@ -19,8 +19,8 @@ export const config = {
     path: process.env.DOCUMENTS_PATH || 'C:\\defined\\front',
     allowedExtensions: ['.md', '.txt', '.js', '.ts', '.jsx', '.tsx', '.css', '.html', '.json'],
     ignoreDirs: ['node_modules', '.git', 'dist', 'build', 'coverage', '.nyc_output', '__pycache__'],
-    maxFileSizeBytes: 1 * 1024 * 1024,
-    maxFiles: parseInt(process.env.MAX_FILES, 10) || 100,
+    maxFileSizeBytes: 10 * 1024 * 1024,
+    maxFiles: process.env.MAX_FILES ? parseInt(process.env.MAX_FILES, 10) : 0,
   },
 
   embeddings: {

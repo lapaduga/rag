@@ -12,8 +12,8 @@ router.get('/status', (req, res) => {
 
 router.post('/index', validateIndexRequest, async (req, res, next) => {
   try {
-    const { path: docPath, strategy } = req.body;
-    const result = await indexer.runIndexing(docPath, strategy || 'fixed');
+    const { path: docPath, strategy, maxFiles } = req.body;
+    const result = await indexer.runIndexing(docPath, strategy || 'fixed', maxFiles);
     res.json({ success: true, data: result });
   } catch (err) {
     next(err);
