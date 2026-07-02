@@ -1,5 +1,5 @@
 import { readFileSync, statSync } from 'fs';
-import { readdirSync } from 'fs';
+import { readdir } from 'fs/promises';
 import { extname, join, relative, resolve } from 'path';
 import { config } from '../config.js';
 import { db } from '../storage/db.js';
@@ -24,15 +24,18 @@ export class Indexer {
       throw new Error('Индексация уже выполняется');
     }
 
-    this.status = { running: true, lastRun: null, totalFiles: 0, processedFiles: 0, errors: [], strategy };
+    this.status = { running: true, phase: 'scanning', message: 'Сканирование файлов...', lastRun: null, totalFiles: 0, processedFiles: 0, errors: [], strategy };
     this.chunker = new Chunker(strategy);
 
     try {
-      const files = this._scanFiles(rootPath);
+      const files = await this._scanFiles(rootPath);
       this.status.totalFiles = files.length;
+      this.status.phase = 'indexing';
+      this.status.message = `Индексация ${files.length} файлов...`;
 
       for (const file of files) {
         try {
+          this.status.message = `Обработка: ${file.split(/[/\\]/).pop()}`;
           await this._indexFile(file);
         } catch (err) {
           this.status.errors.push({ file, error: err.message });
@@ -41,6 +44,8 @@ export class Indexer {
       }
 
       this.status.running = false;
+      this.status.phase = 'done';
+      this.status.message = `Индексация завершена: ${files.length} файлов`;
       this.status.lastRun = new Date().toISOString();
       return this.status;
     } catch (err) {
@@ -56,7 +61,7 @@ export class Indexer {
 
     for (const strategy of strategies) {
       this.chunker = new Chunker(strategy);
-      const files = this._scanFiles(rootPath);
+      const files = await this._scanFiles(rootPath);
       let totalChunks = 0;
       let totalSize = 0;
 
@@ -84,17 +89,23 @@ export class Indexer {
     return results;
   }
 
-  _scanFiles(rootPath) {
+  async _scanFiles(rootPath) {
     const files = [];
     const allowedExt = config.documents.allowedExtensions;
     const maxFiles = config.documents.maxFiles;
     const gitignoreRules = this._loadGitignoreRules(rootPath);
+    let dirCount = 0;
 
-    const scan = (dir) => {
+    const scan = async (dir) => {
       if (files.length >= maxFiles) return;
+      dirCount++;
+      if (dirCount % 25 === 0) {
+        this.status.message = `Сканирование: ${dir.replace(/\\/g, '/').split('/').slice(-2).join('/')}`;
+        await new Promise(r => setImmediate(r));
+      }
       let entries;
       try {
-        entries = readdirSync(dir, { withFileTypes: true });
+        entries = await readdir(dir, { withFileTypes: true });
       } catch {
         return;
       }
@@ -105,7 +116,7 @@ export class Indexer {
 
         if (entry.isDirectory()) {
           if (!this._isIgnored(entry.name, fullPath, true, gitignoreRules)) {
-            scan(fullPath);
+            await scan(fullPath);
           }
         } else if (entry.isFile()) {
           const ext = extname(entry.name).toLowerCase();
@@ -122,7 +133,7 @@ export class Indexer {
       }
     };
 
-    scan(rootPath);
+    await scan(rootPath);
     return files;
   }
 

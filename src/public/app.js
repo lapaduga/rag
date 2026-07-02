@@ -40,7 +40,34 @@ async function startIndexing() {
 
   btn.disabled = true;
   progressBar.style.display = 'flex';
-  progressFill.style.width = '0%';
+  progressFill.style.width = '2%';
+  progressText.textContent = 'Запуск индексации...';
+
+  // Polling стартует ДО blocking-запроса, чтобы ловить фазу scanning
+    const pollInterval = setInterval(async () => {
+      try {
+        const statusRes = await apiFetch('/index/status');
+        const status = statusRes.data;
+        if (status.running) {
+          if (status.phase === 'scanning') {
+            progressFill.style.width = '5%';
+            progressText.textContent = status.message || 'Сканирование...';
+          } else if (status.phase === 'indexing' && status.totalFiles > 0) {
+            const pct = Math.round((status.processedFiles / status.totalFiles) * 100);
+            progressFill.style.width = Math.max(5, pct) + '%';
+            const fileName = status.message ? status.message.split(': ').pop() : '';
+            progressText.textContent = `${status.processedFiles} / ${status.totalFiles} — ${fileName}`;
+          }
+        }
+        if (!status.running) {
+          clearInterval(pollInterval);
+          progressFill.style.width = '100%';
+          progressText.textContent = status.message || `Готово: ${status.totalFiles} файлов`;
+          await loadDocuments();
+          await loadStats();
+        }
+      } catch {}
+    }, 500);
 
   try {
     const res = await apiFetch('/index', {
@@ -49,29 +76,11 @@ async function startIndexing() {
     });
     const data = res.data;
 
-    const pollInterval = setInterval(async () => {
-      try {
-        const statusRes = await apiFetch('/index/status');
-        const status = statusRes.data;
-        if (status.running && status.totalFiles > 0) {
-          const pct = Math.round((status.processedFiles / status.totalFiles) * 100);
-          progressFill.style.width = pct + '%';
-          progressText.textContent = `${status.processedFiles} / ${status.totalFiles}`;
-        }
-        if (!status.running) {
-          clearInterval(pollInterval);
-          progressFill.style.width = '100%';
-          progressText.textContent = `${status.totalFiles} / ${status.totalFiles}`;
-          await loadDocuments();
-          await loadStats();
-        }
-      } catch {}
-    }, 500);
-
     if (data.errors.length > 0) {
       console.warn('Errors during indexing:', data.errors);
     }
   } catch (err) {
+    clearInterval(pollInterval);
     showError('Ошибка индексации: ' + err.message);
   } finally {
     btn.disabled = false;
