@@ -1,4 +1,6 @@
 import express from 'express';
+import { createHash } from 'crypto';
+import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { config } from './config.js';
@@ -12,12 +14,36 @@ const __dirname = dirname(__filename);
 const app = express();
 
 app.use(express.json({ limit: '50mb' }));
-app.use(express.static(resolve(__dirname, 'public')));
+
+const publicDir = resolve(__dirname, 'public');
+app.use(express.static(publicDir, {
+  index: false,
+  maxAge: 0,
+  etag: false,
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('.js') || filePath.endsWith('.css')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  },
+}));
 
 app.use('/api', routes);
 
+let cachedHtml = '';
+try {
+  const html = readFileSync(resolve(publicDir, 'index.html'), 'utf-8');
+  const js = readFileSync(resolve(publicDir, 'app.js'), 'utf-8');
+  const css = readFileSync(resolve(publicDir, 'styles.css'), 'utf-8');
+  const hash = createHash('md5').update(js + css).digest('hex').slice(0, 8);
+  cachedHtml = html.replace(/\?__v__/g, `?v=${hash}`);
+} catch (e) {
+  console.error('[FATAL] Failed to read static files:', e.message);
+  process.exit(1);
+}
+
 app.get('/', (req, res) => {
-  res.sendFile(resolve(__dirname, 'public', 'index.html'));
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.send(cachedHtml);
 });
 
 app.use(notFoundHandler);

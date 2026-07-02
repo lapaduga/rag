@@ -41,6 +41,7 @@ export class Indexer {
           this.status.errors.push({ file, error: err.message });
         }
         this.status.processedFiles++;
+        await new Promise(r => setImmediate(r));
       }
 
       this.status.running = false;
