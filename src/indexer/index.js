@@ -192,7 +192,15 @@ export class Indexer {
   }
 
   async _indexFile(filePath) {
-    const content = readFileSync(filePath, 'utf-8');
+    const shortName = filePath.split(/[/\\]/).pop();
+    console.log(`[INDEX] ${shortName}...`);
+    let content;
+    try {
+      content = readFileSync(filePath, 'utf-8');
+    } catch (err) {
+      console.warn(`[SKIP] ${shortName}: ${err.message}`);
+      return;
+    }
     const meta = this.metadata.extract(filePath, content);
     const chunks = this.chunker.chunk(content, meta);
 
