@@ -109,13 +109,33 @@ class Database {
     this.db.prepare('DELETE FROM chunks WHERE document_id = ?').run(documentId);
   }
 
-  getSimilarChunks(embeddingVector, limit = 5) {
-    const chunks = this.db.prepare('SELECT * FROM chunks WHERE embedding IS NOT NULL LIMIT ?').all(limit);
-    return chunks.map(c => ({
+  getAllChunksWithEmbeddings() {
+    const rows = this.db.prepare(`
+      SELECT c.*, d.filename, d.extension, d.path AS document_path
+      FROM chunks c
+      JOIN documents d ON c.document_id = d.id
+      WHERE c.embedding IS NOT NULL
+    `).all();
+    return rows.map(c => ({
       ...c,
-      metadata: JSON.parse(c.metadata),
-      embedding: JSON.parse(c.embedding),
+      metadata: typeof c.metadata === 'string' ? JSON.parse(c.metadata) : c.metadata,
+      embedding: typeof c.embedding === 'string' ? JSON.parse(c.embedding) : c.embedding,
     }));
+  }
+
+  saveQuery({ question, mode, answer, sources, latency_ms }) {
+    this.db.prepare(`
+      INSERT INTO queries (question, mode, answer, sources, latency_ms)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(question, mode, answer, JSON.stringify(sources), latency_ms);
+  }
+
+  getQueries(limit = 50) {
+    return this.db.prepare('SELECT * FROM queries ORDER BY created_at DESC LIMIT ?').all(limit);
+  }
+
+  getQueriesByMode(mode) {
+    return this.db.prepare('SELECT * FROM queries WHERE mode = ? ORDER BY created_at DESC').all(mode);
   }
 
   getStrategyComparison() {

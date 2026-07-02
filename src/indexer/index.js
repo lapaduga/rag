@@ -243,7 +243,7 @@ export class Indexer {
     }
 
     try {
-      const texts = chunks.map(c => c.content);
+      const texts = chunks.map(c => `[${meta.filename}]\n${c.content}`);
       const embeddings = await this.embedder.generateEmbeddings(texts);
       for (let i = 0; i < chunks.length; i++) {
         chunks[i].embedding = JSON.stringify(embeddings[i]);

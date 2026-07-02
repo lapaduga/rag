@@ -47,4 +47,12 @@ export const config = {
     model: process.env.RERANKER_MODEL || 'rerank-model',
     threshold: parseFloat(process.env.RERANKER_THRESHOLD) || 0.5,
   },
+
+  rag: {
+    topK: parseInt(process.env.RAG_TOP_K, 10) || 5,
+    similarityThreshold: parseFloat(process.env.RAG_SIMILARITY_THRESHOLD) || 0.3,
+    maxTokens: parseInt(process.env.RAG_MAX_TOKENS, 10) || 2000,
+    temperature: parseFloat(process.env.RAG_TEMPERATURE) || 0.3,
+    autoEnabled: process.env.RAG_AUTO_ENABLED !== 'false',
+  },
 };

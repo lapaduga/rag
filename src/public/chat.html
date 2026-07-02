@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RAG Chat</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/chat.css">
+</head>
+<body>
+  <div class="chat-container">
+    <header class="chat-header">
+      <div class="chat-header-left">
+        <a href="/" class="btn btn-secondary btn-sm">← На главную</a>
+        <h1>RAG Chat</h1>
+      </div>
+      <div class="mode-selector">
+        <button class="mode-btn active" data-mode="auto">Auto</button>
+        <button class="mode-btn" data-mode="rag">RAG</button>
+        <button class="mode-btn" data-mode="no-rag">No RAG</button>
+      </div>
+    </header>
+
+    <div class="chat-layout">
+      <div class="chat-main">
+        <div class="messages" id="messages">
+          <div class="message assistant">
+            <div class="message-content">
+              <div class="message-badge mode-auto">Auto</div>
+              <p>Привет! Я — ассистент по кодовой базе. Задай вопрос о проекте.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="input-area">
+          <textarea id="question-input" rows="2" placeholder="Напишите вопрос..."></textarea>
+          <button id="btn-send" class="btn btn-primary">Отправить</button>
+        </div>
+      </div>
+
+      <aside class="chat-sidebar" id="comparison-panel">
+        <div class="sidebar-header">
+          <h2>Сравнение RAG vs No-RAG</h2>
+        </div>
+        <div class="sidebar-body">
+          <div class="empty-state">Введите вопрос ниже и нажмите «Сравнить»</div>
+          <div class="compare-input-area">
+            <textarea id="compare-question" rows="2" placeholder="Вопрос для сравнения..."></textarea>
+            <button id="btn-compare-modes" class="btn btn-secondary">Сравнить</button>
+          </div>
+          <div class="compare-results" id="compare-results"></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script src="/chat.js"></script>
+</body>
+</html>
