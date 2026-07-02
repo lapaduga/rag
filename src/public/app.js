@@ -41,7 +41,8 @@ async function startIndexing() {
 
   btn.disabled = true;
   progressBar.style.display = 'flex';
-  progressFill.style.width = '2%';
+  progressFill.value = 0;
+  progressFill.max = 1;
   progressText.textContent = 'Запуск индексации...';
 
   // Polling стартует ДО blocking-запроса, чтобы ловить фазу scanning
@@ -51,18 +52,21 @@ async function startIndexing() {
         const status = statusRes.data;
         if (status.running) {
           if (status.phase === 'scanning') {
-            progressFill.style.width = '5%';
+            progressFill.max = 1;
+            progressFill.value = 0;
             progressText.textContent = status.message || 'Сканирование...';
           } else if (status.phase === 'indexing' && status.totalFiles > 0) {
-            const pct = Math.round((status.processedFiles / status.totalFiles) * 100);
-            progressFill.style.width = Math.max(5, pct) + '%';
+            if (progressFill.max !== status.totalFiles) {
+              progressFill.max = status.totalFiles;
+            }
+            progressFill.value = status.processedFiles;
             const fileName = status.message ? status.message.split(': ').pop() : '';
             progressText.textContent = `${status.processedFiles} / ${status.totalFiles} — ${fileName}`;
           }
         }
         if (!status.running) {
           clearInterval(pollInterval);
-          progressFill.style.width = '100%';
+          progressFill.value = progressFill.max;
           progressText.textContent = status.message || `Готово: ${status.totalFiles} файлов`;
           await loadDocuments();
           await loadStats();

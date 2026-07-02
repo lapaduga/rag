@@ -122,25 +122,44 @@ html, body {
 .progress-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 16px;
+  gap: 0;
+  padding: 4px 12px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 
-.progress-fill {
-  height: 6px;
+.progress-bar progress {
+  flex: 1;
+  height: 8px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  background: var(--bg-tertiary);
+  border-radius: 0;
+}
+
+.progress-bar progress::-webkit-progress-bar {
+  background: var(--bg-tertiary);
+  border-radius: 0;
+}
+
+.progress-bar progress::-webkit-progress-value {
   background: var(--accent-blue);
-  border-radius: 3px;
   transition: width 0.3s ease;
-  max-width: 400px;
+}
+
+.progress-bar progress::-moz-progress-bar {
+  background: var(--accent-blue);
 }
 
 .progress-text {
   color: var(--text-secondary);
   font-size: 11px;
   white-space: nowrap;
+  padding: 0 12px;
+  min-width: 180px;
+  text-align: right;
 }
 
 .main-content {
