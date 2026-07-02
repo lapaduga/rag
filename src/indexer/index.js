@@ -87,9 +87,8 @@ export class Indexer {
   _scanFiles(rootPath) {
     const files = [];
     const allowedExt = config.documents.allowedExtensions;
-    const ignoreDirs = config.documents.ignoreDirs;
-
     const maxFiles = config.documents.maxFiles;
+    const gitignoreRules = this._loadGitignoreRules(rootPath);
 
     const scan = (dir) => {
       if (files.length >= maxFiles) return;
@@ -103,20 +102,21 @@ export class Indexer {
       for (const entry of entries) {
         if (files.length >= maxFiles) break;
         const fullPath = join(dir, entry.name);
+
         if (entry.isDirectory()) {
-          if (!ignoreDirs.includes(entry.name)) {
+          if (!this._isIgnored(entry.name, fullPath, true, gitignoreRules)) {
             scan(fullPath);
           }
         } else if (entry.isFile()) {
           const ext = extname(entry.name).toLowerCase();
-          if (allowedExt.includes(ext)) {
-            try {
-              const stat = statSync(fullPath);
-              if (stat.size <= config.documents.maxFileSizeBytes) {
-                files.push(fullPath);
-              }
-            } catch {
+          if (!allowedExt.includes(ext)) continue;
+          if (this._isIgnored(entry.name, fullPath, false, gitignoreRules)) continue;
+          try {
+            const stat = statSync(fullPath);
+            if (stat.size <= config.documents.maxFileSizeBytes) {
+              files.push(fullPath);
             }
+          } catch {
           }
         }
       }
@@ -124,6 +124,60 @@ export class Indexer {
 
     scan(rootPath);
     return files;
+  }
+
+  _loadGitignoreRules(rootPath) {
+    try {
+      const gitignorePath = join(rootPath, '.gitignore');
+      const content = readFileSync(gitignorePath, 'utf-8');
+      const rules = [];
+      for (const line of content.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const negate = trimmed.startsWith('!');
+        const pattern = negate ? trimmed.slice(1).trim() : trimmed;
+        const dirOnly = pattern.endsWith('/');
+        const cleanPattern = dirOnly ? pattern.slice(0, -1) : pattern;
+        const anchored = cleanPattern.startsWith('/');
+        const matchPattern = anchored ? cleanPattern.slice(1) : cleanPattern;
+        rules.push({ pattern: matchPattern, negate, dirOnly, anchored });
+      }
+      return rules;
+    } catch {
+      return [];
+    }
+  }
+
+  _isIgnored(name, fullPath, isDir, rules) {
+    const ignoreDirs = config.documents.ignoreDirs;
+    if (isDir && ignoreDirs.includes(name)) return true;
+
+    let ignored = false;
+    for (const rule of rules) {
+      if (rule.dirOnly && !isDir) continue;
+      if (rule.negate) {
+        if (this._matchGitignorePattern(name, fullPath, rule)) ignored = false;
+      } else {
+        if (this._matchGitignorePattern(name, fullPath, rule)) ignored = true;
+      }
+    }
+    return ignored;
+  }
+
+  _matchGitignorePattern(name, fullPath, rule) {
+    const { pattern, anchored } = rule;
+
+    if (pattern === name) return true;
+
+    if (pattern.includes('*')) {
+      const regex = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
+      if (regex.test(name)) return true;
+      if (!anchored && regex.test(name)) return true;
+    }
+
+    if (!anchored && fullPath.replace(/\\/g, '/').includes('/' + pattern)) return true;
+
+    return false;
   }
 
   async _indexFile(filePath) {
