@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RAG Indexer</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <header class="app-header">
+      <div class="logo">
+        <span class="logo-icon">⚡</span>
+        <h1>RAG Indexer</h1>
+      </div>
+      <div class="header-controls">
+        <div class="strategy-selector">
+          <label for="strategy">Стратегия:</label>
+          <select id="strategy">
+            <option value="fixed">Fixed</option>
+            <option value="semantic">Semantic</option>
+          </select>
+        </div>
+        <button id="btn-index" class="btn btn-primary">Запустить индексацию</button>
+        <button id="btn-compare" class="btn btn-secondary">Сравнить стратегии</button>
+        <button id="btn-clear" class="btn btn-danger">Очистить индекс</button>
+      </div>
+    </header>
+
+    <div class="progress-bar" id="progress-bar" style="display:none;">
+      <div class="progress-fill" id="progress-fill"></div>
+      <span class="progress-text" id="progress-text">0 / 0</span>
+    </div>
+
+    <main class="main-content">
+      <aside class="panel panel-left">
+        <div class="panel-header">
+          <h2>Документы</h2>
+          <span class="badge" id="doc-count">0</span>
+        </div>
+        <div class="panel-body" id="doc-list">
+          <div class="empty-state">Нет проиндексированных документов</div>
+        </div>
+      </aside>
+
+      <section class="panel panel-center">
+        <div class="panel-header">
+          <h2>Детали документа</h2>
+        </div>
+        <div class="panel-body" id="doc-detail">
+          <div class="empty-state">Выберите документ из списка</div>
+        </div>
+      </section>
+
+      <aside class="panel panel-right">
+        <div class="panel-header">
+          <h2>Сравнение стратегий</h2>
+        </div>
+        <div class="panel-body" id="comparison-panel">
+          <div class="empty-state">Запустите сравнение стратегий</div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
