@@ -134,7 +134,6 @@ html, body {
   background: var(--accent-blue);
   border-radius: 3px;
   transition: width 0.3s ease;
-  flex: 1;
   max-width: 400px;
 }
 
