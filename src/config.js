@@ -24,13 +24,9 @@ export const config = {
   },
 
   embeddings: {
-    apiKey: process.env.EMBEDDING_API_KEY || '',
-    apiUrl: process.env.EMBEDDING_API_URL || 'https://api.openai.com/v1/embeddings',
-    model: process.env.EMBEDDING_MODEL || 'text-embedding-3-small',
-    dimension: parseInt(process.env.EMBEDDING_DIMENSION, 10) || 1536,
+    model: process.env.EMBEDDING_MODEL || 'Xenova/all-MiniLM-L6-v2',
+    dimension: parseInt(process.env.EMBEDDING_DIMENSION, 10) || 384,
     batchSize: parseInt(process.env.EMBEDDING_BATCH_SIZE, 10) || 20,
-    retryAttempts: 3,
-    retryBackoffMs: 1000,
   },
 
   chunking: {

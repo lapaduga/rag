@@ -143,19 +143,16 @@ export class Indexer {
 
     for (const chunk of chunks) {
       chunk.document_id = docId;
-      if (!chunk.embedding) chunk.embedding = null;
     }
 
-    if (this.embedder.apiKey) {
-      try {
-        const texts = chunks.map(c => c.content);
-        const embeddings = await this.embedder.generateEmbeddings(texts);
-        for (let i = 0; i < chunks.length; i++) {
-          chunks[i].embedding = JSON.stringify(embeddings[i]);
-        }
-      } catch (err) {
-        console.warn(`[WARN] Embedding failed for ${filePath}: ${err.message}`);
+    try {
+      const texts = chunks.map(c => c.content);
+      const embeddings = await this.embedder.generateEmbeddings(texts);
+      for (let i = 0; i < chunks.length; i++) {
+        chunks[i].embedding = JSON.stringify(embeddings[i]);
       }
+    } catch (err) {
+      console.warn(`[WARN] Embedding failed for ${filePath}: ${err.message}`);
     }
 
     db.insertChunks(chunks);

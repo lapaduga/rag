@@ -2,55 +2,36 @@ import { config } from '../config.js';
 
 export class Embedder {
   constructor() {
-    this.apiKey = config.embeddings.apiKey;
-    this.apiUrl = config.embeddings.apiUrl;
-    this.model = config.embeddings.model;
-    this.batchSize = config.embeddings.batchSize;
-    this.retryAttempts = config.embeddings.retryAttempts;
-    this.retryBackoffMs = config.embeddings.retryBackoffMs;
+    this.pipeline = null;
+    this.modelName = 'Xenova/all-MiniLM-L6-v2';
   }
 
   async generateEmbedding(text) {
-    return this._embedWithRetry(text, 0);
+    const pipe = await this._getPipeline();
+    const result = await pipe(text, { pooling: 'mean', normalize: true });
+    return Array.from(result.data);
   }
 
   async generateEmbeddings(texts) {
+    const pipe = await this._getPipeline();
     const results = [];
-    for (let i = 0; i < texts.length; i += this.batchSize) {
-      const batch = texts.slice(i, i + this.batchSize);
-      const batchResults = await Promise.all(batch.map(t => this.generateEmbedding(t)));
-      results.push(...batchResults);
+    for (let i = 0; i < texts.length; i += config.embeddings.batchSize) {
+      const batch = texts.slice(i, i + config.embeddings.batchSize);
+      const result = await pipe(batch, { pooling: 'mean', normalize: true });
+      for (let j = 0; j < batch.length; j++) {
+        const start = j * result.dims[1];
+        const end = start + result.dims[1];
+        results.push(Array.from(result.data.slice(start, end)));
+      }
     }
     return results;
   }
 
-  async _embedWithRetry(text, attempt) {
-    try {
-      const response = await fetch(this.apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({
-          input: text,
-          model: this.model,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Embedding API error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data.data[0].embedding;
-    } catch (err) {
-      if (attempt < this.retryAttempts - 1) {
-        const delay = this.retryBackoffMs * Math.pow(2, attempt);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        return this._embedWithRetry(text, attempt + 1);
-      }
-      throw err;
+  async _getPipeline() {
+    if (!this.pipeline) {
+      const { pipeline } = await import('@xenova/transformers');
+      this.pipeline = await pipeline('feature-extraction', this.modelName);
     }
+    return this.pipeline;
   }
 }
