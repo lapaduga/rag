@@ -39,7 +39,9 @@ async function startIndexing() {
   const progressFill = document.getElementById('progress-fill');
   const progressText = document.getElementById('progress-text');
 
+  const btnStop = document.getElementById('btn-stop');
   btn.disabled = true;
+  btnStop.style.display = 'inline-block';
   progressBar.style.display = 'flex';
   progressFill.value = 0;
   progressFill.max = 1;
@@ -68,6 +70,8 @@ async function startIndexing() {
           clearInterval(pollInterval);
           progressFill.value = progressFill.max;
           progressText.textContent = status.message || `Готово: ${status.totalFiles} файлов`;
+          btnStop.style.display = 'none';
+          btn.disabled = false;
           await loadDocuments();
           await loadStats();
         }
@@ -86,8 +90,10 @@ async function startIndexing() {
     }
   } catch (err) {
     clearInterval(pollInterval);
+    btnStop.style.display = 'none';
     showError('Ошибка индексации: ' + err.message);
   } finally {
+    btnStop.style.display = 'none';
     btn.disabled = false;
     setTimeout(() => { progressBar.style.display = 'none'; }, 5000);
   }
@@ -277,6 +283,9 @@ function showError(msg) {
 }
 
 document.getElementById('btn-index').addEventListener('click', startIndexing);
+document.getElementById('btn-stop').addEventListener('click', async () => {
+  try { await apiFetch('/index/cancel', { method: 'POST' }); } catch {}
+});
 document.getElementById('btn-compare').addEventListener('click', compareStrategies);
 document.getElementById('btn-clear').addEventListener('click', clearIndex);
 

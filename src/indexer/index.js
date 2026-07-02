@@ -12,6 +12,7 @@ export class Indexer {
     this.chunker = null;
     this.embedder = new Embedder();
     this.metadata = new MetadataExtractor();
+    this._aborted = false;
     this.status = { running: false, lastRun: null, totalFiles: 0, processedFiles: 0, errors: [] };
   }
 
@@ -19,25 +20,34 @@ export class Indexer {
     return this.status;
   }
 
+  cancelIndexing() {
+    this._aborted = true;
+  }
+
   async runIndexing(rootPath, strategy = 'fixed', maxFiles) {
     if (this.status.running) {
       throw new Error('Индексация уже выполняется');
     }
 
+    this._aborted = false;
     this.status = { running: true, phase: 'scanning', message: 'Сканирование файлов...', lastRun: null, totalFiles: 0, processedFiles: 0, errors: [], strategy };
     this.chunker = new Chunker(strategy);
 
     try {
       const files = await this._scanFiles(rootPath, maxFiles);
+      if (this._aborted) throw new Error('Индексация отменена');
+
       this.status.totalFiles = files.length;
       this.status.phase = 'indexing';
       this.status.message = `Индексация ${files.length} файлов...`;
 
       for (const file of files) {
+        if (this._aborted) throw new Error('Индексация отменена');
         try {
           this.status.message = `Обработка: ${file.split(/[/\\]/).pop()}`;
           await this._indexFile(file);
         } catch (err) {
+          if (this._aborted) throw new Error('Индексация отменена');
           this.status.errors.push({ file, error: err.message });
         }
         this.status.processedFiles++;
@@ -50,9 +60,12 @@ export class Indexer {
       this.status.lastRun = new Date().toISOString();
       return this.status;
     } catch (err) {
+      this._aborted = false;
       this.status.running = false;
+      this.status.phase = err.message === 'Индексация отменена' ? 'cancelled' : 'error';
+      this.status.message = err.message;
       this.status.lastRun = new Date().toISOString();
-      throw err;
+      return this.status;
     }
   }
 

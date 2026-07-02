@@ -24,6 +24,11 @@ router.get('/index/status', (req, res) => {
   res.json({ success: true, data: indexer.getStatus() });
 });
 
+router.post('/index/cancel', (req, res) => {
+  indexer.cancelIndexing();
+  res.json({ success: true, data: indexer.getStatus() });
+});
+
 router.get('/documents', (req, res) => {
   const docs = db.getAllDocuments();
   res.json({ success: true, data: docs });
