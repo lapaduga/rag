@@ -40,6 +40,7 @@ async function startIndexing() {
 
   btn.disabled = true;
   progressBar.style.display = 'flex';
+  progressFill.style.width = '0%';
 
   try {
     const res = await apiFetch('/index', {
@@ -48,20 +49,33 @@ async function startIndexing() {
     });
     const data = res.data;
 
-    progressFill.style.width = '100%';
-    progressText.textContent = `${data.totalFiles} / ${data.totalFiles}`;
+    const pollInterval = setInterval(async () => {
+      try {
+        const statusRes = await apiFetch('/index/status');
+        const status = statusRes.data;
+        if (status.running && status.totalFiles > 0) {
+          const pct = Math.round((status.processedFiles / status.totalFiles) * 100);
+          progressFill.style.width = pct + '%';
+          progressText.textContent = `${status.processedFiles} / ${status.totalFiles}`;
+        }
+        if (!status.running) {
+          clearInterval(pollInterval);
+          progressFill.style.width = '100%';
+          progressText.textContent = `${status.totalFiles} / ${status.totalFiles}`;
+          await loadDocuments();
+          await loadStats();
+        }
+      } catch {}
+    }, 500);
 
     if (data.errors.length > 0) {
       console.warn('Errors during indexing:', data.errors);
     }
-
-    await loadDocuments();
-    await loadStats();
   } catch (err) {
     showError('Ошибка индексации: ' + err.message);
   } finally {
     btn.disabled = false;
-    setTimeout(() => { progressBar.style.display = 'none'; }, 2000);
+    setTimeout(() => { progressBar.style.display = 'none'; }, 5000);
   }
 }
 

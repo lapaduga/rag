@@ -67,6 +67,26 @@ router.post('/index/compare', async (req, res, next) => {
   }
 });
 
+router.post('/query', async (req, res, next) => {
+  try {
+    const { question, mode } = req.body;
+    if (!question) {
+      return res.status(400).json({ error: true, message: 'Поле "question" обязательно' });
+    }
+    res.json({
+      success: true,
+      data: {
+        question,
+        mode: mode || 'rag',
+        answer: 'RAG query endpoint — implementation pending',
+        sources: [],
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/compare/results', (req, res) => {
   const comparison = db.getStrategyComparison();
   res.json({ success: true, data: comparison });

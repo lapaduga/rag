@@ -195,6 +195,8 @@ export class Indexer {
       size_bytes: Buffer.byteLength(content, 'utf-8'),
     });
 
+    db.deleteChunksByDocument(docId);
+
     for (const chunk of chunks) {
       chunk.document_id = docId;
     }

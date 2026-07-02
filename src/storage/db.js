@@ -105,6 +105,19 @@ class Database {
     return doc ? { lastIndexedAt: doc.indexed_at, hasData: true } : { lastIndexedAt: null, hasData: false };
   }
 
+  deleteChunksByDocument(documentId) {
+    this.db.prepare('DELETE FROM chunks WHERE document_id = ?').run(documentId);
+  }
+
+  getSimilarChunks(embeddingVector, limit = 5) {
+    const chunks = this.db.prepare('SELECT * FROM chunks WHERE embedding IS NOT NULL LIMIT ?').all(limit);
+    return chunks.map(c => ({
+      ...c,
+      metadata: JSON.parse(c.metadata),
+      embedding: JSON.parse(c.embedding),
+    }));
+  }
+
   getStrategyComparison() {
     const strategies = ['fixed', 'semantic'];
     const result = {};
