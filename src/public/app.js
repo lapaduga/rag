@@ -72,6 +72,7 @@ async function startIndexing() {
           progressText.textContent = status.message || `Готово: ${status.totalFiles} файлов`;
           btnStop.style.display = 'none';
           btn.disabled = false;
+          playNotification();
           await loadDocuments();
           await loadStats();
         }
@@ -276,6 +277,24 @@ function formatBytes(bytes) {
   const units = ['B', 'KB', 'MB'];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
+}
+
+function playNotification() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(800, t);
+    osc.frequency.linearRampToValueAtTime(1200, t + 0.15);
+    gain.gain.setValueAtTime(0.3, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.4);
+  } catch {}
 }
 
 function showError(msg) {

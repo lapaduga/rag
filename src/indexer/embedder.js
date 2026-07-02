@@ -15,10 +15,16 @@ export class Embedder {
   async generateEmbeddings(texts) {
     const pipe = await this._getPipeline();
     const results = [];
-    for (let i = 0; i < texts.length; i++) {
-      const result = await pipe(texts[i], { pooling: 'mean', normalize: true });
-      results.push(Array.from(result.data));
-      if (i % 3 === 0) {
+    const batchSize = config.embeddings.batchSize;
+    for (let i = 0; i < texts.length; i += batchSize) {
+      const batch = texts.slice(i, i + batchSize);
+      const result = await pipe(batch, { pooling: 'mean', normalize: true });
+      for (let j = 0; j < batch.length; j++) {
+        const start = j * result.dims[1];
+        const end = start + result.dims[1];
+        results.push(Array.from(result.data.slice(start, end)));
+      }
+      if (texts.length > batchSize) {
         await new Promise(r => setImmediate(r));
       }
     }
