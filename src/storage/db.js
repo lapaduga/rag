@@ -31,7 +31,9 @@ class Database {
         const sql = readFileSync(migrationPath, 'utf-8');
         this.db.exec(sql);
       } catch (e) {
-        if (e.code !== 'ENOENT') throw e;
+        if (e.code === 'ENOENT') continue;
+        if (e.message && e.message.includes('duplicate column name')) continue;
+        throw e;
       }
     }
     return this;
