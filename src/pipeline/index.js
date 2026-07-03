@@ -1,0 +1,82 @@
+export class RagPipeline {
+  constructor({ retriever, reranker, rewriter, augmenter, llm, config }) {
+    this.retriever = retriever;
+    this.reranker = reranker;
+    this.rewriter = rewriter;
+    this.augmenter = augmenter;
+    this.llm = llm;
+    this.config = config || {};
+  }
+
+  async execute(question, options = {}) {
+    const start = Date.now();
+    const stages = [];
+
+    const topKBefore = options.topKBefore ?? this.config.topKBefore ?? 20;
+    const topKAfter = options.topKAfter ?? this.config.topKAfter ?? 5;
+    const threshold = options.threshold;
+    const doRerank = options.reranker === true;
+    const doRewrite = options.queryRewrite === true;
+
+    let query = question;
+    let rewrittenQuery = null;
+
+    if (doRewrite && this.rewriter) {
+      const t0 = Date.now();
+      query = await this.rewriter.rewrite(question);
+      rewrittenQuery = query;
+      stages.push({ stage: 'rewrite', query, time_ms: Date.now() - t0 });
+    }
+
+    const t1 = Date.now();
+    let chunks = await this.retriever.search(query, {
+      topK: Math.max(topKBefore, topKAfter, 50),
+      threshold: this.config.similarityThreshold ?? 0.0,
+    });
+    stages.push({ stage: 'retrieval', count: chunks.length, time_ms: Date.now() - t1 });
+
+    if (doRerank && this.reranker && chunks.length > 0) {
+      const t2 = Date.now();
+      chunks = await this.reranker.rerank(query, chunks);
+      stages.push({ stage: 'rerank', count: chunks.length, time_ms: Date.now() - t2 });
+    }
+
+    if (threshold != null) {
+      const t3 = Date.now();
+      const before = chunks.length;
+      const scoreKey = doRerank ? 'combinedScore' : 'similarity';
+      chunks = chunks.filter(c => (c[scoreKey] ?? c.similarity ?? 0) >= threshold);
+      stages.push({ stage: 'filter', count: chunks.length, time_ms: Date.now() - t3, before });
+    }
+
+    const t4 = Date.now();
+    chunks = chunks.slice(0, topKAfter);
+    stages.push({ stage: 'topK', count: chunks.length, time_ms: Date.now() - t4 });
+
+    const messages = this.augmenter.buildPrompt(question, chunks, 'rag');
+    const t5 = Date.now();
+    const result = await this.llm.chat(messages);
+    stages.push({ stage: 'llm', time_ms: Date.now() - t5 });
+
+    const total = Date.now() - start;
+
+    return {
+      answer: result.answer,
+      sources: chunks.map(c => ({
+        chunk_id: c.chunk_id,
+        filename: c.filename,
+        content: c.content ? c.content.slice(0, 300) : '',
+        similarity: c.similarity,
+        rerankScore: c.rerankScore,
+        combinedScore: c.combinedScore,
+      })),
+      pipeline: {
+        stages,
+        originalQuery: question,
+        rewrittenQuery,
+      },
+      timing: { total },
+      usage: result.usage,
+    };
+  }
+}

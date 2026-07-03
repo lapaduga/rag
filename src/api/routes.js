@@ -5,7 +5,11 @@ import { Embedder } from '../indexer/embedder.js';
 import { Retriever } from '../retriever/index.js';
 import { Augmenter } from '../augmenter/index.js';
 import { LlmClient } from '../llm/index.js';
+import { Reranker } from '../reranker/index.js';
+import { QueryRewriter } from '../query-rewrite/index.js';
+import { RagPipeline } from '../pipeline/index.js';
 import { validateIndexRequest } from './middleware.js';
+import { config } from '../config.js';
 
 const router = Router();
 const indexer = new Indexer();
@@ -13,6 +17,16 @@ const embedder = new Embedder();
 const retriever = new Retriever(embedder);
 const augmenter = new Augmenter();
 const llmClient = new LlmClient();
+const reranker = new Reranker({ model: config.reranker.model });
+const rewriter = new QueryRewriter(llmClient);
+const ragPipeline = new RagPipeline({
+  retriever,
+  reranker,
+  rewriter,
+  augmenter,
+  llm: llmClient,
+  config: config.pipeline || {},
+});
 
 router.get('/status', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });
@@ -84,12 +98,52 @@ router.post('/index/compare', async (req, res, next) => {
 
 router.post('/query', async (req, res, next) => {
   try {
-    const { question, mode = 'auto', topK, threshold } = req.body;
+    const { question, mode = 'auto', pipeline: pipelineOpts } = req.body;
     if (!question) {
       return res.status(400).json({ error: true, message: 'Поле "question" обязательно' });
     }
 
-    const result = await llmClient.chatWithRag(question, retriever, augmenter, mode, { topK, threshold });
+    let actualMode = mode;
+    if (mode === 'auto') {
+      actualMode = llmClient._detectMode(question);
+    }
+
+    let result;
+    if (actualMode === 'no-rag') {
+      const messages = augmenter.buildPrompt(question, [], 'no-rag');
+      const llmResult = await llmClient.chat(messages);
+      result = {
+        answer: llmResult.answer,
+        mode: 'no-rag',
+        searchQuery: question,
+        needsTranslation: false,
+        sources: [],
+        timing: { total: llmResult.timing_ms },
+        usage: llmResult.usage,
+        pipeline: null,
+      };
+    } else {
+      const pipelineConfig = {
+        queryRewrite: pipelineOpts?.queryRewrite ?? config.pipeline?.queryRewrite ?? false,
+        reranker: pipelineOpts?.reranker ?? config.pipeline?.reranker ?? false,
+        threshold: pipelineOpts?.threshold ?? (pipelineOpts?.threshold === null ? undefined : config.pipeline?.threshold),
+        topKBefore: pipelineOpts?.topKBefore ?? config.pipeline?.topKBefore ?? 20,
+        topKAfter: pipelineOpts?.topKAfter ?? config.pipeline?.topKAfter ?? 5,
+      };
+
+      const pipelineResult = await ragPipeline.execute(question, pipelineConfig);
+
+      result = {
+        answer: pipelineResult.answer,
+        mode: 'rag',
+        searchQuery: question,
+        needsTranslation: false,
+        sources: pipelineResult.sources,
+        timing: pipelineResult.timing,
+        usage: pipelineResult.usage,
+        pipeline: pipelineResult.pipeline,
+      };
+    }
 
     db.saveQuery({
       question,
@@ -97,6 +151,7 @@ router.post('/query', async (req, res, next) => {
       answer: result.answer,
       sources: result.sources,
       latency_ms: result.timing.total,
+      pipeline: result.pipeline ? JSON.stringify(result.pipeline) : null,
     });
 
     res.json({
@@ -109,6 +164,7 @@ router.post('/query', async (req, res, next) => {
         sources: result.sources,
         timing: result.timing,
         usage: result.usage,
+        pipeline: result.pipeline,
       }
     });
   } catch (err) {
@@ -118,19 +174,33 @@ router.post('/query', async (req, res, next) => {
 
 router.post('/query/compare', async (req, res, next) => {
   try {
-    const { questions, topK, threshold } = req.body;
-    if (!questions || !Array.isArray(questions) || questions.length === 0) {
-      return res.status(400).json({ error: true, message: 'Поле "questions" обязательно и должно быть массивом' });
+    const { question, pipelines } = req.body;
+    if (!question) {
+      return res.status(400).json({ error: true, message: 'Поле "question" обязательно' });
+    }
+    if (!pipelines || !Array.isArray(pipelines) || pipelines.length === 0) {
+      return res.status(400).json({ error: true, message: 'Поле "pipelines" обязательно и должно быть массивом' });
     }
 
     const results = [];
-    for (const question of questions) {
-      const ragResult = await llmClient.chatWithRag(question, retriever, augmenter, 'rag', { topK, threshold });
-      const noRagResult = await llmClient.chatWithRag(question, retriever, augmenter, 'no-rag', { topK, threshold });
+    for (const pipeCfg of pipelines) {
+      const cfg = {
+        queryRewrite: pipeCfg.queryRewrite ?? false,
+        reranker: pipeCfg.reranker ?? false,
+        threshold: pipeCfg.threshold,
+        topKBefore: pipeCfg.topKBefore ?? config.pipeline?.topKBefore ?? 20,
+        topKAfter: pipeCfg.topKAfter ?? config.pipeline?.topKAfter ?? 5,
+      };
+
+      const pipelineResult = await ragPipeline.execute(question, cfg);
+
       results.push({
-        question,
-        rag: { answer: ragResult.answer, sources: ragResult.sources, timing: ragResult.timing },
-        noRag: { answer: noRagResult.answer, sources: noRagResult.sources, timing: noRagResult.timing },
+        name: pipeCfg.name || 'unnamed',
+        config: cfg,
+        answer: pipelineResult.answer,
+        sources: pipelineResult.sources,
+        pipeline: pipelineResult.pipeline,
+        timing: pipelineResult.timing,
       });
     }
 
@@ -144,6 +214,11 @@ router.get('/queries', (req, res) => {
   const limit = parseInt(req.query.limit) || 50;
   const mode = req.query.mode || null;
   const queries = mode ? db.getQueriesByMode(mode) : db.getQueries(limit);
+  res.json({ success: true, data: queries });
+});
+
+router.get('/queries/pipeline', (req, res) => {
+  const queries = db.getQueriesWithPipeline();
   res.json({ success: true, data: queries });
 });
 

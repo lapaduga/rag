@@ -44,8 +44,16 @@ export const config = {
 
   reranker: {
     enabled: process.env.RERANKER_ENABLED === 'true',
-    model: process.env.RERANKER_MODEL || 'rerank-model',
+    model: process.env.RERANKER_MODEL || 'Xenova/ms-marco-MiniLM-L-6-v2',
     threshold: parseFloat(process.env.RERANKER_THRESHOLD) || 0.5,
+  },
+
+  pipeline: {
+    queryRewrite: process.env.PIPELINE_QUERY_REWRITE === 'true',
+    reranker: process.env.PIPELINE_RERANKER === 'true',
+    threshold: process.env.PIPELINE_THRESHOLD ? parseFloat(process.env.PIPELINE_THRESHOLD) : undefined,
+    topKBefore: parseInt(process.env.PIPELINE_TOP_K_BEFORE, 10) || 20,
+    topKAfter: parseInt(process.env.PIPELINE_TOP_K_AFTER, 10) || 5,
   },
 
   rag: {

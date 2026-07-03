@@ -23,9 +23,17 @@ class Database {
   }
 
   migrate() {
-    const migrationPath = resolve(__dirname, 'migrations', '001_init.sql');
-    const sql = readFileSync(migrationPath, 'utf-8');
-    this.db.exec(sql);
+    const migrationsDir = resolve(__dirname, 'migrations');
+    const files = ['001_init.sql', '002_pipeline.sql'];
+    for (const file of files) {
+      const migrationPath = resolve(migrationsDir, file);
+      try {
+        const sql = readFileSync(migrationPath, 'utf-8');
+        this.db.exec(sql);
+      } catch (e) {
+        if (e.code !== 'ENOENT') throw e;
+      }
+    }
     return this;
   }
 
@@ -123,11 +131,11 @@ class Database {
     }));
   }
 
-  saveQuery({ question, mode, answer, sources, latency_ms }) {
+  saveQuery({ question, mode, answer, sources, latency_ms, pipeline }) {
     this.db.prepare(`
-      INSERT INTO queries (question, mode, answer, sources, latency_ms)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(question, mode, answer, JSON.stringify(sources), latency_ms);
+      INSERT INTO queries (question, mode, answer, sources, latency_ms, pipeline_json)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(question, mode, answer, JSON.stringify(sources), latency_ms, pipeline || null);
   }
 
   getQueries(limit = 50) {
@@ -136,6 +144,14 @@ class Database {
 
   getQueriesByMode(mode) {
     return this.db.prepare('SELECT * FROM queries WHERE mode = ? ORDER BY created_at DESC').all(mode);
+  }
+
+  getQueriesWithPipeline() {
+    const rows = this.db.prepare("SELECT * FROM queries WHERE pipeline_json IS NOT NULL ORDER BY created_at DESC LIMIT 50").all();
+    return rows.map(q => ({
+      ...q,
+      pipeline: q.pipeline_json ? JSON.parse(q.pipeline_json) : null,
+    }));
   }
 
   getStrategyComparison() {

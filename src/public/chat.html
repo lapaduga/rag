@@ -14,12 +14,35 @@
         <a href="/" class="btn btn-secondary btn-sm">← На главную</a>
         <h1>RAG Chat</h1>
       </div>
-      <div class="mode-selector">
-        <button class="mode-btn active" data-mode="auto">Auto</button>
-        <button class="mode-btn" data-mode="rag">RAG</button>
-        <button class="mode-btn" data-mode="no-rag">No RAG</button>
+      <div class="chat-header-controls">
+        <div class="mode-selector">
+          <button class="mode-btn active" data-mode="auto">Auto</button>
+          <button class="mode-btn" data-mode="rag">RAG</button>
+          <button class="mode-btn" data-mode="no-rag">No RAG</button>
+        </div>
+        <button class="btn btn-secondary btn-sm pipeline-toggle" id="btn-pipeline-toggle" onclick="togglePipelineConfig()">Pipeline Config ▾</button>
       </div>
     </header>
+
+    <div class="pipeline-config" id="pipeline-config">
+      <div class="pipeline-config-body">
+        <label class="pipeline-check">
+          <input type="checkbox" id="cfg-rewrite"> Query Rewrite
+        </label>
+        <label class="pipeline-check">
+          <input type="checkbox" id="cfg-reranker"> Reranker
+        </label>
+        <label class="pipeline-check">
+          <input type="checkbox" id="cfg-threshold-enable"> Threshold Filter
+          <input type="range" id="cfg-threshold" min="0" max="1" step="0.05" value="0.5" class="pipeline-range" disabled>
+          <span class="pipeline-range-value" id="cfg-threshold-value">0.5</span>
+        </label>
+        <div class="pipeline-number-group">
+          <label>Retrieval Top-K: <input type="number" id="cfg-topk-before" value="20" min="1" max="100" class="pipeline-number"></label>
+          <label>Final Top-K: <input type="number" id="cfg-topk-after" value="5" min="1" max="50" class="pipeline-number"></label>
+        </div>
+      </div>
+    </div>
 
     <div class="chat-layout">
       <div class="chat-main">
@@ -34,23 +57,33 @@
 
         <div class="input-area">
           <textarea id="question-input" rows="2" placeholder="Напишите вопрос..."></textarea>
-          <button id="btn-send" class="btn btn-primary">Отправить</button>
+          <div class="input-buttons">
+            <button id="btn-send" class="btn btn-primary">Отправить</button>
+            <button id="btn-compare" class="btn btn-secondary">Сравнить режимы</button>
+          </div>
         </div>
       </div>
 
       <aside class="chat-sidebar" id="comparison-panel">
         <div class="sidebar-header">
-          <h2>Сравнение RAG vs No-RAG</h2>
+          <h2>Сравнение режимов</h2>
         </div>
         <div class="sidebar-body">
-          <div class="empty-state">Введите вопрос ниже и нажмите «Сравнить»</div>
-          <div class="compare-input-area">
-            <textarea id="compare-question" rows="2" placeholder="Вопрос для сравнения..."></textarea>
-            <button id="btn-compare-modes" class="btn btn-secondary">Сравнить</button>
-          </div>
-          <div class="compare-results" id="compare-results"></div>
+          <div class="empty-state">Нажмите «Сравнить режимы» для анализа</div>
         </div>
       </aside>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden" id="compare-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Сравнение режимов RAG</h2>
+        <button class="btn btn-secondary btn-sm" onclick="closeCompareModal()">✕</button>
+      </div>
+      <div class="modal-body" id="compare-modal-body">
+        <div class="empty-state">Загрузка...</div>
+      </div>
     </div>
   </div>
 
