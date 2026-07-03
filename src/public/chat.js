@@ -36,7 +36,7 @@ function getPipelineConfig() {
   };
 }
 
-function addMessage(role, text, mode, sources, pipeline) {
+function addMessage(role, text, mode, sources, pipeline, confidenceScore, hasEnoughContext, citations, isDontKnow) {
   const container = document.getElementById('messages');
   const div = document.createElement('div');
   div.className = `message ${role}`;
@@ -47,8 +47,18 @@ function addMessage(role, text, mode, sources, pipeline) {
     badgeHtml = `<div class="message-badge mode-${mode}">${modeLabel}</div>`;
   }
 
+  let dontKnowHtml = '';
+  if (isDontKnow) {
+    dontKnowHtml = `<div class="dont-know-badge">Не знаю</div>`;
+  }
+
+  let warningHtml = '';
+  if (hasEnoughContext === false && !isDontKnow) {
+    warningHtml = `<div class="context-warning">⚠️ Контекст недостаточно релевантен (confidence: ${(confidenceScore * 100).toFixed(1)}%). Ответ может содержать галлюцинации.</div>`;
+  }
+
   let sourcesHtml = '';
-  if (sources && sources.length > 0) {
+  if (!isDontKnow && sources && sources.length > 0) {
     sourcesHtml = `
       <div class="sources-toggle" onclick="this.nextElementSibling.classList.toggle('open')">
         Источники (${sources.length})
@@ -56,11 +66,40 @@ function addMessage(role, text, mode, sources, pipeline) {
       <div class="sources-list">
         ${sources.map(s => `
           <div class="source-item">
-            <span class="source-file">${escapeHtml(s.filename)}</span>
+            <span class="source-file" title="${escapeHtml(s.filename)}">${escapeHtml(s.path || s.filename)}</span>
+            <span class="source-section">${escapeHtml(s.section || '')}</span>
             <span class="source-score">${(s.similarity * 100).toFixed(1)}%</span>
             ${s.rerankScore != null ? `<span class="source-rerank">R:${(s.rerankScore * 100).toFixed(1)}%</span>` : ''}
           </div>
         `).join('')}
+      </div>
+    `;
+  }
+
+  let citationsHtml = '';
+  if (!isDontKnow && citations && citations.length > 0) {
+    const validCount = citations.filter(c => c.isValid).length;
+    citationsHtml = `
+      <div class="citations-section">
+        <div class="citations-header" onclick="this.nextElementSibling.classList.toggle('open')">
+          Цитаты (${validCount}/${citations.length} валидны) ▾
+        </div>
+        <div class="citations-list">
+          ${citations.map((c, i) => `
+            <div class="citation-item ${c.isValid ? '' : 'invalid'}">
+              <div class="citation-meta">
+                <span class="citation-num">#${c.sourceIdx != null ? c.sourceIdx : i}</span>
+                <span class="citation-file">${escapeHtml(c.filename)}</span>
+                <span class="citation-chunk">${c.chunkId?.slice(0, 8) || ''}</span>
+                <span class="citation-${c.isValid ? 'valid' : 'invalid'}">${c.isValid ? '✓ валидна' : '✗ невалидна'}</span>
+              </div>
+              <pre class="citation-quote"><code>${escapeHtml(c.quote)}</code></pre>
+            </div>
+          `).join('')}
+        </div>
+        <div class="validation-status ${validCount === citations.length ? 'valid' : 'invalid'}">
+          ${validCount === citations.length ? '✓ Все цитаты валидны' : `⚠️ ${citations.length - validCount} цитат не прошли валидацию`}
+        </div>
       </div>
     `;
   }
@@ -75,6 +114,8 @@ function addMessage(role, text, mode, sources, pipeline) {
       filter: { label: 'Filter', color: 'stage-filter' },
       topK: { label: 'Top-K', color: 'stage-topk' },
       llm: { label: 'LLM', color: 'stage-llm' },
+      'citation-parse': { label: 'Citation Parse', color: 'stage-citation' },
+      'low-confidence-guard': { label: 'Low Confidence', color: 'stage-lowconf' },
     };
     const total = pipeline.stages.reduce((s, st) => s + (st.time_ms || 0), 0);
 
@@ -91,9 +132,12 @@ function addMessage(role, text, mode, sources, pipeline) {
             else if (st.stage === 'rerank') detail = ` ${st.count} items`;
             else if (st.stage === 'filter' && st.before != null) detail = ` ${st.before}→${st.count} (threshold ${$('cfg-threshold')?.value || '?'})`;
             else if (st.stage === 'topK') detail = ` ${st.count} items`;
+            else if (st.stage === 'citation-parse') detail = ` ${st.citationCount} cit. (${st.validCount} valid)`;
+            else if (st.stage === 'low-confidence-guard') detail = ` ${((st.confidenceScore || 0) * 100).toFixed(1)}% < ${((st.minConfidence || 0) * 100).toFixed(0)}%`;
             return `<div class="pipeline-stage ${info.color}"><span class="stage-name">${info.label}</span><span class="stage-detail">${detail}</span><span class="stage-time">${formatTiming(st.time_ms)}</span></div>`;
           }).join('')}
           <div class="pipeline-total">Total: ${formatTiming(total)}</div>
+          <div class="pipeline-confidence ${(confidenceScore || 0) < 0.3 ? 'low' : ''}">Confidence: ${((confidenceScore || 0) * 100).toFixed(1)}% | Citations: ${citations?.length || 0} | Valid: ${citations?.filter(c => c.isValid).length || 0}</div>
         </div>
       </div>
     `;
@@ -101,10 +145,9 @@ function addMessage(role, text, mode, sources, pipeline) {
 
   div.innerHTML = `
     <div class="message-content">
-      ${badgeHtml}
-      <div class="message-text">${escapeHtml(text)}</div>
-      ${sourcesHtml}
-      ${pipelineHtml}
+      ${badgeHtml}${dontKnowHtml}${warningHtml}
+      <div class="message-text ${isDontKnow ? 'dont-know-message' : ''}">${escapeHtml(text)}</div>
+      ${sourcesHtml}${citationsHtml}${pipelineHtml}
     </div>
   `;
 
@@ -152,7 +195,8 @@ async function sendMessage() {
       body: JSON.stringify(body),
     });
     removeTyping();
-    addMessage('assistant', res.data.answer, res.data.mode, res.data.sources, res.data.pipeline);
+    addMessage('assistant', res.data.answer, res.data.mode, res.data.sources, res.data.pipeline,
+      res.data.confidenceScore, res.data.hasEnoughContext, res.data.citations, res.data.isDontKnow);
   } catch (err) {
     removeTyping();
     addMessage('assistant', `Ошибка: ${err.message}`);
@@ -209,6 +253,18 @@ async function openCompareModal() {
                   <span class="compare-label">Источники:</span>
                   <span class="compare-value">${r.sources?.length || 0}</span>
                   ${isBestSources ? '<span class="compare-badge">best</span>' : ''}
+                </div>
+                <div class="compare-meta-row">
+                  <span class="compare-label">Цитаты:</span>
+                  <span class="compare-value">${r.citations?.length || 0}</span>
+                </div>
+                <div class="compare-meta-row">
+                  <span class="compare-label">Валидные:</span>
+                  <span class="compare-value">${r.citations?.filter(c => c.isValid).length || 0}</span>
+                </div>
+                <div class="compare-meta-row">
+                  <span class="compare-label">Не знаю:</span>
+                  <span class="compare-value">${r.isDontKnow ? 'Да' : 'Нет'}</span>
                 </div>
                 <div class="compare-meta-row">
                   <span class="compare-label">Время:</span>

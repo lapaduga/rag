@@ -143,12 +143,13 @@ export class Retriever {
         const fnameRel = chunk.document_path
           ? filenameRelevance(keywords, chunk.document_path)
           : filenameRelevance(keywords, filename);
+        const kwInContent = keywords.filter(kw => kw.english && chunk.content.toLowerCase().includes(kw.english)).length;
         const passesVector = sim >= threshold;
         const passesKeyword = keywords.length > 0 && fnameRel.coverage >= 0.3;
+        const passesContent = kwInContent >= 1;
 
-        if (passesVector || passesKeyword) {
+        if (passesVector || passesKeyword || passesContent) {
           seen.add(key);
-          const kwInContent = keywords.filter(kw => kw.english && chunk.content.toLowerCase().includes(kw.english)).length;
           allScored.push({
             chunk_id: chunk.chunk_id,
             content: chunk.content,

@@ -30,10 +30,10 @@ export const config = {
   },
 
   chunking: {
-    chunkSize: parseInt(process.env.CHUNK_SIZE, 10) || 500,
-    overlap: parseInt(process.env.CHUNK_OVERLAP, 10) || 50,
-    fixedCharSize: 2000,
-    fixedCharOverlap: 200,
+    chunkSize: parseInt(process.env.CHUNK_SIZE, 10) || 250,
+    overlap: parseInt(process.env.CHUNK_OVERLAP, 10) || 30,
+    fixedCharSize: 1000,
+    fixedCharOverlap: 100,
   },
 
   chat: {
@@ -53,11 +53,12 @@ export const config = {
     reranker: process.env.PIPELINE_RERANKER === 'true',
     threshold: process.env.PIPELINE_THRESHOLD ? parseFloat(process.env.PIPELINE_THRESHOLD) : undefined,
     topKBefore: parseInt(process.env.PIPELINE_TOP_K_BEFORE, 10) || 20,
-    topKAfter: parseInt(process.env.PIPELINE_TOP_K_AFTER, 10) || 5,
+    topKAfter: parseInt(process.env.PIPELINE_TOP_K_AFTER, 10) || 15,
+    minConfidence: parseFloat(process.env.PIPELINE_MIN_CONFIDENCE) || 0.25,
   },
 
   rag: {
-    topK: parseInt(process.env.RAG_TOP_K, 10) || 5,
+    topK: parseInt(process.env.RAG_TOP_K, 10) || 15,
     similarityThreshold: parseFloat(process.env.RAG_SIMILARITY_THRESHOLD) || 0.3,
     maxTokens: parseInt(process.env.RAG_MAX_TOKENS, 10) || 2000,
     temperature: parseFloat(process.env.RAG_TEMPERATURE) || 0.3,

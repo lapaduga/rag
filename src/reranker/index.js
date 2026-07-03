@@ -27,15 +27,21 @@ export class Reranker {
     const scores = [];
     for (const logits of outputs.logits) {
       const data = Array.from(logits.data);
-      const exp0 = Math.exp(data[0]);
-      const exp1 = Math.exp(data[1]);
-      scores.push(exp1 / (exp0 + exp1));
+      const score = 1 / (1 + Math.exp(-data[0]));
+      scores.push(score);
     }
 
-    return chunks.map((chunk, i) => ({
-      ...chunk,
-      rerankScore: scores[i] ?? 0,
-      combinedScore: 0.4 * (chunk.similarity || 0) + 0.6 * (scores[i] ?? 0)
-    })).sort((a, b) => b.combinedScore - a.combinedScore);
+    const maxScore = scores.length > 0 ? Math.max(...scores) : 1;
+    const minScore = scores.length > 0 ? Math.min(...scores) : 0;
+    const range = maxScore - minScore || 1;
+
+    return chunks.map((chunk, i) => {
+      const normalized = (scores[i] - minScore) / range;
+      return {
+        ...chunk,
+        rerankScore: normalized,
+        combinedScore: 0.4 * (chunk.similarity || 0) + 0.6 * normalized
+      };
+    }).sort((a, b) => b.combinedScore - a.combinedScore);
   }
 }

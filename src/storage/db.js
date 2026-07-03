@@ -24,7 +24,7 @@ class Database {
 
   migrate() {
     const migrationsDir = resolve(__dirname, 'migrations');
-    const files = ['001_init.sql', '002_pipeline.sql'];
+    const files = ['001_init.sql', '002_pipeline.sql', '003_citations.sql'];
     for (const file of files) {
       const migrationPath = resolve(migrationsDir, file);
       try {
@@ -133,11 +133,18 @@ class Database {
     }));
   }
 
-  saveQuery({ question, mode, answer, sources, latency_ms, pipeline }) {
+  saveQuery({ question, mode, answer, sources, latency_ms, pipeline, citations, confidence_score, has_enough_context, is_dont_know }) {
     this.db.prepare(`
-      INSERT INTO queries (question, mode, answer, sources, latency_ms, pipeline_json)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(question, mode, answer, JSON.stringify(sources), latency_ms, pipeline || null);
+      INSERT INTO queries (question, mode, answer, sources, latency_ms, pipeline_json, citations, confidence_score, has_enough_context, is_dont_know)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      question, mode, answer, JSON.stringify(sources), latency_ms,
+      pipeline || null,
+      citations ? JSON.stringify(citations) : null,
+      confidence_score != null ? confidence_score : null,
+      has_enough_context ? 1 : 0,
+      is_dont_know ? 1 : 0
+    );
   }
 
   getQueries(limit = 50) {
@@ -152,6 +159,28 @@ class Database {
     const rows = this.db.prepare("SELECT * FROM queries WHERE pipeline_json IS NOT NULL ORDER BY created_at DESC LIMIT 50").all();
     return rows.map(q => ({
       ...q,
+      pipeline: q.pipeline_json ? JSON.parse(q.pipeline_json) : null,
+    }));
+  }
+
+  getQueriesWithCitations(limit = 50) {
+    const rows = this.db.prepare("SELECT * FROM queries WHERE citations IS NOT NULL ORDER BY created_at DESC LIMIT ?").all(limit);
+    return rows.map(q => ({
+      ...q,
+      sources: q.sources ? JSON.parse(q.sources) : [],
+      citations: q.citations ? JSON.parse(q.citations) : [],
+      pipeline: q.pipeline_json ? JSON.parse(q.pipeline_json) : null,
+    }));
+  }
+
+  getQueriesForValidation(limit = 10) {
+    const rows = this.db.prepare(
+      "SELECT * FROM queries WHERE mode = 'rag' AND answer IS NOT NULL ORDER BY created_at DESC LIMIT ?"
+    ).all(limit);
+    return rows.map(q => ({
+      ...q,
+      sources: q.sources ? JSON.parse(q.sources) : [],
+      citations: q.citations ? JSON.parse(q.citations) : [],
       pipeline: q.pipeline_json ? JSON.parse(q.pipeline_json) : null,
     }));
   }

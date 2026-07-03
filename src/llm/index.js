@@ -116,6 +116,10 @@ export class LlmClient {
         similarity: c.similarity,
         keywords_matched: (c._keywordScore?.matched || 0) + (c._contentKwMatches || 0),
       })),
+      citations: [],
+      confidenceScore: 0,
+      hasEnoughContext: true,
+      isDontKnow: false,
       timing: {
         total: Date.now() - start,
         llm: result.timing_ms,

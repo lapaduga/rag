@@ -118,6 +118,10 @@ router.post('/query', async (req, res, next) => {
         searchQuery: question,
         needsTranslation: false,
         sources: [],
+        citations: [],
+        confidenceScore: 0,
+        hasEnoughContext: true,
+        isDontKnow: false,
         timing: { total: llmResult.timing_ms },
         usage: llmResult.usage,
         pipeline: null,
@@ -139,6 +143,10 @@ router.post('/query', async (req, res, next) => {
         searchQuery: question,
         needsTranslation: false,
         sources: pipelineResult.sources,
+        citations: pipelineResult.citations || [],
+        confidenceScore: pipelineResult.confidenceScore,
+        hasEnoughContext: pipelineResult.hasEnoughContext,
+        isDontKnow: pipelineResult.isDontKnow || false,
         timing: pipelineResult.timing,
         usage: pipelineResult.usage,
         pipeline: pipelineResult.pipeline,
@@ -152,6 +160,10 @@ router.post('/query', async (req, res, next) => {
       sources: result.sources,
       latency_ms: result.timing.total,
       pipeline: result.pipeline ? JSON.stringify(result.pipeline) : null,
+      citations: result.citations ? JSON.stringify(result.citations) : null,
+      confidence_score: result.confidenceScore,
+      has_enough_context: result.hasEnoughContext,
+      is_dont_know: result.isDontKnow || false,
     });
 
     res.json({
@@ -162,6 +174,10 @@ router.post('/query', async (req, res, next) => {
         searchQuery: result.searchQuery,
         needsTranslation: result.needsTranslation,
         sources: result.sources,
+        citations: result.citations || [],
+        confidenceScore: result.confidenceScore,
+        hasEnoughContext: result.hasEnoughContext,
+        isDontKnow: result.isDontKnow || false,
         timing: result.timing,
         usage: result.usage,
         pipeline: result.pipeline,
@@ -199,6 +215,10 @@ router.post('/query/compare', async (req, res, next) => {
         config: cfg,
         answer: pipelineResult.answer,
         sources: pipelineResult.sources,
+        citations: pipelineResult.citations || [],
+        confidenceScore: pipelineResult.confidenceScore,
+        hasEnoughContext: pipelineResult.hasEnoughContext,
+        isDontKnow: pipelineResult.isDontKnow || false,
         pipeline: pipelineResult.pipeline,
         timing: pipelineResult.timing,
       });
@@ -219,6 +239,12 @@ router.get('/queries', (req, res) => {
 
 router.get('/queries/pipeline', (req, res) => {
   const queries = db.getQueriesWithPipeline();
+  res.json({ success: true, data: queries });
+});
+
+router.get('/queries/citations', (req, res) => {
+  const limit = parseInt(req.query.limit) || 50;
+  const queries = db.getQueriesWithCitations(limit);
   res.json({ success: true, data: queries });
 });
 

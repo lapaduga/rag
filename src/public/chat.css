@@ -344,3 +344,30 @@
   color: var(--text-secondary);
   margin-top: 6px;
 }
+
+.citations-section { margin-top: 10px; border-top: 1px solid var(--border-color); padding-top: 8px; }
+.citations-header { font-size: 11px; font-weight: 600; color: var(--accent-green); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 6px; cursor: pointer; user-select: none; }
+.citations-header:hover { text-decoration: underline; }
+.citations-list { display: none; }
+.citations-list.open { display: block; }
+.citation-item { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; padding: 8px 10px; margin-bottom: 6px; font-size: 12px; }
+.citation-item.invalid { border-color: var(--accent-red); opacity: 0.7; }
+.citation-meta { display: flex; gap: 12px; font-size: 10px; color: var(--text-secondary); margin-bottom: 4px; font-family: var(--font-mono); }
+.citation-meta .citation-file { color: var(--accent-yellow); }
+.citation-meta .citation-chunk { color: var(--accent-blue); }
+.citation-meta .citation-num { color: var(--text-secondary); font-weight: 700; min-width: 20px; }
+.citation-meta .citation-valid { color: var(--accent-green); }
+.citation-meta .citation-invalid { color: var(--accent-red); }
+.citation-quote { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); background: var(--bg-primary); padding: 10px 12px; border-radius: 4px; border-left: 3px solid var(--accent-green); white-space: pre; word-break: break-word; line-height: 1.5; overflow-x: auto; margin: 0; }
+.citation-quote code { font-family: inherit; background: none; padding: 0; }
+.citation-item.invalid .citation-quote { border-left-color: var(--accent-red); }
+.dont-know-badge { display: inline-block; background: var(--accent-red); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 3px; margin-bottom: 6px; text-transform: uppercase; }
+.dont-know-message { font-style: italic; color: var(--accent-orange); }
+.context-warning { font-size: 11px; color: var(--accent-orange); background: rgba(206, 145, 120, 0.1); border: 1px solid rgba(206, 145, 120, 0.3); border-radius: 4px; padding: 6px 10px; margin-bottom: 6px; }
+.validation-status { display: flex; align-items: center; gap: 6px; font-size: 11px; margin-top: 6px; padding: 4px 8px; border-radius: 3px; }
+.validation-status.valid { background: rgba(78, 201, 176, 0.1); color: var(--accent-green); }
+.validation-status.invalid { background: rgba(244, 71, 71, 0.1); color: var(--accent-red); }
+.pipeline-confidence { border-top: 1px solid var(--border-color); margin-top: 4px; padding-top: 4px; font-size: 11px; font-weight: 600; color: var(--accent-green); font-family: var(--font-mono); }
+.pipeline-confidence.low { color: var(--accent-orange); }
+.stage-citation .stage-name { color: #c586c0; }
+.stage-lowconf .stage-name { color: #f44747; }
