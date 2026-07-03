@@ -8,6 +8,8 @@ import { LlmClient } from '../llm/index.js';
 import { Reranker } from '../reranker/index.js';
 import { QueryRewriter } from '../query-rewrite/index.js';
 import { RagPipeline } from '../pipeline/index.js';
+import { MemoryManager } from '../memory/index.js';
+import { ContextWindow } from '../context-window/index.js';
 import { validateIndexRequest } from './middleware.js';
 import { config } from '../config.js';
 
@@ -27,6 +29,9 @@ const ragPipeline = new RagPipeline({
   llm: llmClient,
   config: config.pipeline || {},
 });
+
+const memoryManager = new MemoryManager(llmClient);
+const contextWindow = new ContextWindow({ maxTokens: 6000, maxMessages: 20 });
 
 router.get('/status', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });
@@ -98,9 +103,17 @@ router.post('/index/compare', async (req, res, next) => {
 
 router.post('/query', async (req, res, next) => {
   try {
-    const { question, mode = 'auto', pipeline: pipelineOpts } = req.body;
+    const { question, mode = 'auto', pipeline: pipelineOpts, thread_id } = req.body;
     if (!question) {
       return res.status(400).json({ error: true, message: 'Поле "question" обязательно' });
+    }
+
+    let history = [];
+    let taskMemory = [];
+    if (thread_id) {
+      const maxHist = config.pipeline.maxHistoryMessages;
+      history = db.getRecentMessages(thread_id, maxHist > 0 ? maxHist : undefined);
+      taskMemory = db.getTaskMemory(thread_id);
     }
 
     let actualMode = mode;
@@ -135,7 +148,12 @@ router.post('/query', async (req, res, next) => {
         topKAfter: pipelineOpts?.topKAfter ?? config.pipeline?.topKAfter ?? 5,
       };
 
-      const pipelineResult = await ragPipeline.execute(question, pipelineConfig);
+      const pipelineResult = await ragPipeline.execute(question, {
+        ...pipelineConfig,
+        threadId: thread_id,
+        history,
+        taskMemory,
+      });
 
       result = {
         answer: pipelineResult.answer,
@@ -151,6 +169,46 @@ router.post('/query', async (req, res, next) => {
         usage: pipelineResult.usage,
         pipeline: pipelineResult.pipeline,
       };
+    }
+
+    if (thread_id) {
+      db.saveMessage({
+        thread_id,
+        role: 'user',
+        content: question,
+      });
+      db.saveMessage({
+        thread_id,
+        role: 'assistant',
+        content: result.answer,
+        sources: result.sources || [],
+        citations: result.citations || [],
+        confidence_score: result.confidenceScore,
+        has_enough_context: result.hasEnoughContext,
+        is_dont_know: result.isDontKnow || false,
+        pipeline: result.pipeline ? JSON.stringify(result.pipeline) : null,
+      });
+
+      if (config.pipeline?.memoryExtractionEnabled && memoryManager) {
+        const messages = db.getMessagesByThread(thread_id, 20);
+        const extracted = await memoryManager.extractTaskState(messages);
+        if (extracted?.goal) {
+          db.setTaskMemory({ thread_id, key: 'goal', value: extracted.goal, type: 'goal' });
+        }
+        if (extracted?.constraints) {
+          for (const c of extracted.constraints) {
+            db.setTaskMemory({ thread_id, key: `constraint_${Date.now()}`, value: c, type: 'constraint' });
+          }
+        }
+        if (extracted?.terms) {
+          db.setTaskMemory({ thread_id, key: 'terms', value: extracted.terms.join(', '), type: 'term' });
+        }
+        if (extracted?.clarifications) {
+          for (const c of extracted.clarifications) {
+            db.setTaskMemory({ thread_id, key: `clarification_${Date.now()}`, value: c, type: 'clarification' });
+          }
+        }
+      }
     }
 
     db.saveQuery({
@@ -181,6 +239,7 @@ router.post('/query', async (req, res, next) => {
         timing: result.timing,
         usage: result.usage,
         pipeline: result.pipeline,
+        thread_id,
       }
     });
   } catch (err) {
@@ -229,6 +288,88 @@ router.post('/query/compare', async (req, res, next) => {
     next(err);
   }
 });
+
+// === Threads ===
+
+router.post('/threads', async (req, res, next) => {
+  try {
+    const { title, task_goal, constraints } = req.body;
+    const id = db.createThread({ title: title || 'Новый диалог', task_goal, constraints });
+    res.json({ success: true, data: { id } });
+  } catch (err) { next(err); }
+});
+
+router.get('/threads', async (req, res, next) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const threads = db.getAllThreads(limit);
+    res.json({ success: true, data: threads });
+  } catch (err) { next(err); }
+});
+
+router.get('/threads/:id', async (req, res, next) => {
+  try {
+    const thread = db.getThread(parseInt(req.params.id, 10));
+    if (!thread) return res.status(404).json({ error: true, message: 'Диалог не найден' });
+    res.json({ success: true, data: thread });
+  } catch (err) { next(err); }
+});
+
+router.delete('/threads/:id', async (req, res, next) => {
+  try {
+    db.deleteThread(parseInt(req.params.id, 10));
+    res.json({ success: true, message: 'Диалог удален' });
+  } catch (err) { next(err); }
+});
+
+router.post('/threads/:id/clear-messages', async (req, res, next) => {
+  try {
+    db.clearThreadMessages(parseInt(req.params.id, 10));
+    res.json({ success: true, message: 'Сообщения удалены' });
+  } catch (err) { next(err); }
+});
+
+// === Messages ===
+
+router.get('/threads/:id/messages', async (req, res, next) => {
+  try {
+    const messages = db.getMessagesByThread(parseInt(req.params.id, 10));
+    res.json({ success: true, data: messages });
+  } catch (err) { next(err); }
+});
+
+// === Task Memory ===
+
+router.get('/threads/:id/memory', async (req, res, next) => {
+  try {
+    const memory = db.getTaskMemory(parseInt(req.params.id, 10));
+    res.json({ success: true, data: memory });
+  } catch (err) { next(err); }
+});
+
+router.post('/threads/:id/memory', async (req, res, next) => {
+  try {
+    const { key, value, type } = req.body;
+    db.setTaskMemory({ thread_id: parseInt(req.params.id, 10), key, value, type });
+    res.json({ success: true, message: 'Память обновлена' });
+  } catch (err) { next(err); }
+});
+
+router.delete('/threads/:id/memory/:key', async (req, res, next) => {
+  try {
+    db.deleteTaskMemoryByKey(parseInt(req.params.id, 10), req.params.key);
+    res.json({ success: true, message: 'Запись удалена' });
+  } catch (err) { next(err); }
+});
+
+router.post('/threads/:id/memory/clear', async (req, res, next) => {
+  try {
+    db.clearTaskMemory(parseInt(req.params.id, 10));
+    res.json({ success: true, message: 'Память очищена' });
+  } catch (err) { next(err); }
+});
+
+// === Queries ===
 
 router.get('/queries', (req, res) => {
   const limit = parseInt(req.query.limit) || 50;

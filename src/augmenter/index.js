@@ -1,15 +1,22 @@
 export class Augmenter {
-  buildPrompt(question, chunks, mode) {
+  buildPrompt(question, chunks, mode, options = {}) {
     if (mode === 'rag' && chunks && chunks.length > 0) {
       const contextWithIds = chunks.map((c, idx) => {
         const meta = typeof c.metadata === 'string' ? JSON.parse(c.metadata) : c.metadata;
         return `[SOURCE_${idx}] [Файл: ${c.filename}] [Chunk: ${c.chunk_id}] [Section: ${meta?.section || 'other'}] [Title: ${meta?.title || 'untitled'}]\n${c.content}`;
       }).join('\n\n---\n\n');
 
-      return [
-        {
-          role: 'system',
-          content: `Ты — ассистент по кодовой базе. Отвечай СТРОГО на основе предоставленного контекста.
+      let systemContent = `Ты — ассистент по кодовой базе. Отвечай на основе предоставленного контекста. Код в контексте — основной источник информации: если в коде есть классы, функции, импорты, шаблоны по теме вопроса — анализируй их и давай ответ. Не говори "не знаю", если в контексте есть релевантный код.`;
+
+      if (options.memoryContext) {
+        systemContent += options.memoryContext;
+      }
+
+      if (options.historyContext) {
+        systemContent += `\n\nИСТОРИЯ ДИАЛОГА:\n${options.historyContext}`;
+      }
+
+      systemContent += `
 
 КОНТЕКСТ:
 ${contextWithIds}
@@ -23,28 +30,33 @@ ${contextWithIds}
    - Файл: имя_файла | Chunk: chunk_id | Релевантность: X%
 
 ПРАВИЛА:
-- Если ответ найден в контексте — используй ТОЛЬКО его.
-- Если контекста недостаточно — ответь ТОЛЬКО: "В проиндексированном коде эта информация не найдена. Попробуйте уточнить вопрос или переформулировать его."
+- Отвечай на основе контекста. Если в контексте есть релевантный код — используй его для ответа, даже если нет текстового описания.
+- Анализируй паттерны в коде (классы, наследование, импорты, регистрацию элементов) и делай выводы.
+- Отвечай "Не знаю" ТОЛЬКО если в контексте нет НИ релевантного кода, НИ текста по теме.
 - Цитаты можно обрезать, но нельзя переписывать. Минимум 15 символов.
 - Каждая цитата должна содержать [SOURCE_N] ссылку.
 - Минимум 1 цитата, максимум 3.
 
-ПРИМЕР ПРАВИЛЬНОГО ОТВЕТА:
-Вопрос: Какой компонент отвечает за модальное окно?
+ПРИМЕР ПРАВИЛЬНОГО ОТВЕТА (когда в контексте есть код):
+Вопрос: Как создать веб-компонент?
 Ответ:
-Компонент ModalDialog отвечает за модальное окно.
+В кодовой базе веб-компоненты создаются через наследование от HTMLElement и регистрацию через customElements.define. Например:
 
-> [SOURCE_0] [Файл: ModalDialog.tsx] [Chunk: abc-123]
-> export function ModalDialog({ isOpen, onClose, children }) {
->   return isOpen ? <div className="modal">{children}</div> : null;
+> [SOURCE_0] [Файл: custom.info-about-reactions.js] [Chunk: abc-123]
+> class InfoAboutReactionsEl extends HTMLElement {
+>   constructor() { super(); }
+>   connectedCallback() { this.setHtml(); }
 > }
 
-ИСТОЧНИКИ:
-- Файл: ModalDialog.tsx | Chunk: abc-123 | Релевантность: 95%
+> [SOURCE_1] [Файл: webrtc-user-renderer.js] [Chunk: def-456]
+> customElements.define('webrtc-user-renderer2', WebrtcUserRenderer2);
 
-ПРИМЕР ОТВЕТА "НЕ ЗНАЮ":
-В проиндексированном коде эта информация не найдена. Попробуйте уточнить вопрос или переформулировать его.`
-        },
+ИСТОЧНИКИ:
+- Файл: custom.info-about-reactions.js | Chunk: abc-123 | Релевантность: 85%
+- Файл: webrtc-user-renderer.js | Chunk: def-456 | Релевантность: 80%`;
+
+      return [
+        { role: 'system', content: systemContent },
         { role: 'user', content: `Вопрос: ${question}` }
       ];
     }

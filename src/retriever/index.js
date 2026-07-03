@@ -44,6 +44,29 @@ const RU_TO_EN = {
   'метод':'method','метода':'method','методы':'method',
   'аргумент':'argument','аргумента':'argument','аргументы':'argument',
   'параметр':'parameter','параметра':'parameter','параметры':'parameter',
+  'создать':'create','создания':'create','создание':'create','создавать':'create','создаётся':'create',
+  'новый':'new','новая':'new','новое':'new','новые':'new','нового':'new','новой':'new',
+  'веб':'web',
+  'получить':'get','получение':'get','получения':'get','получаем':'get',
+  'установить':'set','установка':'set','устанавливается':'set',
+  'удалить':'delete','удаление':'delete','удаляется':'delete',
+  'добавить':'add','добавление':'add','добавляется':'add',
+  'изменить':'change','изменение':'change',
+  'сохранить':'save','сохраняется':'save',
+  'загрузить':'load','загрузка':'load','загрузки':'load',
+  'показать':'show','отобразить':'display','отображается':'display',
+  'вызвать':'call','вызывается':'call','вызов':'call',
+  'обработать':'process','обрабатывается':'process',
+  'проверить':'check','проверка':'check',
+  'использовать':'use','используется':'use','используются':'use',
+  'работает':'work','работают':'work',
+  'содержит':'contain','содержащий':'contain',
+  'называется':'called','называют':'called',
+  'должен':'must','должна':'must','должны':'must',
+  'нужно':'need','необходимо':'need',
+  'может':'can','могут':'can','можно':'can',
+  'помощь':'help','помощи':'help',
+  'пример':'example','примера':'example',
 };
 
 const RU_TO_LATIN = {
@@ -60,6 +83,22 @@ function transliterate(word) {
   }
   return result;
 }
+
+const CONTENT_KW_STOP = new Set([
+  'the','and','are','was','were','been','being',
+  'have','has','had','will','would','could','should','shall',
+  'can','may','might','its','your','their','our','his','her',
+  'where','when','why','how','what','which','who','whom',
+  'that','these','those','for','with','without','from','into',
+  'onto','upon','about','within','through','during','before',
+  'after','above','below','only','just','also','very','too',
+  'some','any','every','each','both','few','many','much',
+  'more','most','other','another','same','different','such',
+  'than','then','well','back','still','already','off','over',
+  'under','out','down','up','because','since','while','if',
+  'between','against','include','make','work','need','want',
+  'know','tell','show','case','way','example',
+]);
 
 function extractKeywords(query) {
   const words = query.toLowerCase().split(/[^a-zа-яё0-9]+/).filter(w => w.length > 2);
@@ -143,7 +182,9 @@ export class Retriever {
         const fnameRel = chunk.document_path
           ? filenameRelevance(keywords, chunk.document_path)
           : filenameRelevance(keywords, filename);
-        const kwInContent = keywords.filter(kw => kw.english && chunk.content.toLowerCase().includes(kw.english)).length;
+        const kwInContent = keywords.filter(kw =>
+          kw.english && !CONTENT_KW_STOP.has(kw.english) && chunk.content.toLowerCase().includes(kw.english)
+        ).length;
         const passesVector = sim >= threshold;
         const passesKeyword = keywords.length > 0 && fnameRel.coverage >= 0.3;
         const passesContent = kwInContent >= 1;
@@ -168,14 +209,19 @@ export class Retriever {
     allScored.sort((a, b) => {
       const aSim = a.similarity;
       const bSim = b.similarity;
-      const aKw = a._keywordScore.matched + a._contentKwMatches;
-      const bKw = b._keywordScore.matched + b._contentKwMatches;
-      const aBoost = aKw >= 2 ? 0.2 * aKw : 0;
-      const bBoost = bKw >= 2 ? 0.2 * bKw : 0;
+      const aKw = a._keywordScore.matched;
+      const bKw = b._keywordScore.matched;
+      const aBoost = aKw >= 2 ? Math.min(0.5, 0.2 * aKw) : 0;
+      const bBoost = bKw >= 2 ? Math.min(0.5, 0.2 * bKw) : 0;
       return (bSim + bBoost) - (aSim + aBoost);
     });
 
-    return allScored.slice(0, topK);
+    const topKChunks = allScored.slice(0, topK);
+    const ckLimit = Math.max(50, topK);
+    const contentMatchChunks = allScored.filter(c =>
+      (c._contentKwMatches || 0) > 0 && !topKChunks.some(t => t.chunk_id === c.chunk_id)
+    ).slice(0, ckLimit);
+    return [...topKChunks, ...contentMatchChunks];
   }
 
   async _getAllCached() {

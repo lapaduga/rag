@@ -1,6 +1,8 @@
 const API = '/api';
 let currentMode = 'auto';
 let pipelineConfigOpen = false;
+let currentThreadId = null;
+let threads = [];
 
 const $ = id => document.getElementById(id);
 
@@ -45,6 +47,14 @@ function addMessage(role, text, mode, sources, pipeline, confidenceScore, hasEno
   if (mode) {
     const modeLabel = { auto: 'Auto', rag: 'RAG', 'no-rag': 'No RAG' }[mode] || mode;
     badgeHtml = `<div class="message-badge mode-${mode}">${modeLabel}</div>`;
+  }
+
+  let translateHtml = '';
+  if (pipeline && pipeline.stages) {
+    const translateStage = pipeline.stages.find(s => s.stage === 'translate');
+    if (translateStage && translateStage.query && pipeline.originalQuery) {
+      translateHtml = `<div class="translate-banner"><span class="translate-label">RU:</span> ${escapeHtml(pipeline.originalQuery)} <span class="translate-arrow">→</span> <span class="translate-label">EN:</span> ${escapeHtml(translateStage.query)}</div>`;
+    }
   }
 
   let dontKnowHtml = '';
@@ -145,7 +155,7 @@ function addMessage(role, text, mode, sources, pipeline, confidenceScore, hasEno
 
   div.innerHTML = `
     <div class="message-content">
-      ${badgeHtml}${dontKnowHtml}${warningHtml}
+      ${badgeHtml}${translateHtml}${dontKnowHtml}${warningHtml}
       <div class="message-text ${isDontKnow ? 'dont-know-message' : ''}">${escapeHtml(text)}</div>
       ${sourcesHtml}${citationsHtml}${pipelineHtml}
     </div>
@@ -170,6 +180,271 @@ function removeTyping() {
   if (el) el.remove();
 }
 
+// === Threads ===
+
+async function loadThreads() {
+  try {
+    const res = await apiFetch('/threads');
+    threads = res.data;
+    renderThreadsList();
+  } catch (err) {
+    console.error('Ошибка загрузки диалогов:', err);
+  }
+}
+
+function renderThreadsList() {
+  const list = document.getElementById('threads-list');
+  if (!threads || threads.length === 0) {
+    list.innerHTML = '<div class="empty-state">Нет диалогов</div>';
+    return;
+  }
+  list.innerHTML = threads.map(t => {
+    const date = new Date(t.updated_at || t.created_at);
+    const dateStr = date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const msgCount = t.message_count || 0;
+    const isActive = t.id === currentThreadId;
+    return `
+      <div class="thread-item ${isActive ? 'active' : ''}" data-thread-id="${t.id}">
+        <div class="thread-item-main">
+          <div class="thread-title">${escapeHtml(t.title || 'Без названия')}</div>
+          <div class="thread-meta">${msgCount} сообщ. · ${dateStr}</div>
+        </div>
+        <button class="thread-delete-btn" data-thread-id="${t.id}" title="Удалить диалог">×</button>
+      </div>
+    `;
+  }).join('');
+
+  list.querySelectorAll('.thread-item').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.thread-delete-btn')) return;
+      const id = parseInt(el.dataset.threadId, 10);
+      switchThread(id);
+    });
+  });
+
+  list.querySelectorAll('.thread-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const id = parseInt(btn.dataset.threadId, 10);
+      const thread = threads.find(t => t.id === id);
+      const title = thread ? thread.title || 'без названия' : 'диалог';
+      if (!confirm(`Удалить диалог «${title}»?`)) return;
+      try {
+        await apiFetch(`/threads/${id}`, { method: 'DELETE' });
+        threads = threads.filter(t => t.id !== id);
+        if (id === currentThreadId) {
+          const next = threads[0] || null;
+          if (next) {
+            currentThreadId = next.id;
+            renderThreadsList();
+            await loadThreadMessages(currentThreadId);
+          } else {
+            currentThreadId = null;
+            renderThreadsList();
+            document.getElementById('messages').innerHTML = '';
+            addWelcomeMessage();
+            document.getElementById('memory-panel').style.display = 'none';
+          }
+        } else {
+          renderThreadsList();
+        }
+      } catch (err) {
+        showError('Ошибка удаления диалога: ' + err.message);
+      }
+    });
+  });
+}
+
+async function createThread() {
+  try {
+    const res = await apiFetch('/threads', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'Новый диалог' }),
+    });
+    currentThreadId = res.data.id;
+    await loadThreads();
+    await loadThreadMessages(currentThreadId);
+    document.getElementById('memory-panel').style.display = 'block';
+    document.getElementById('messages').innerHTML = '';
+    addWelcomeMessage();
+  } catch (err) {
+    showError('Ошибка создания диалога: ' + err.message);
+  }
+}
+
+async function switchThread(threadId) {
+  if (threadId === currentThreadId) return;
+  currentThreadId = threadId;
+
+  document.querySelectorAll('.thread-item').forEach(el => {
+    el.classList.toggle('active', parseInt(el.dataset.threadId, 10) === threadId);
+  });
+
+  await loadThreadMessages(threadId);
+  document.getElementById('memory-panel').style.display = 'block';
+}
+
+async function loadThreadMessages(threadId) {
+  try {
+    const res = await apiFetch(`/threads/${threadId}/messages`);
+    const messages = res.data;
+    const container = document.getElementById('messages');
+    container.innerHTML = '';
+    if (!messages || messages.length === 0) {
+      addWelcomeMessage();
+    } else {
+      for (const msg of messages) {
+        addMessage(msg.role, msg.content, msg.role === 'assistant' ? 'rag' : null,
+          msg.sources, msg.pipeline, msg.confidence_score, msg.has_enough_context,
+          msg.citations, msg.is_dont_know);
+      }
+    }
+    container.scrollTop = container.scrollHeight;
+    await loadThreadMemory(threadId);
+  } catch (err) {
+    showError('Ошибка загрузки сообщений: ' + err.message);
+  }
+}
+
+function addWelcomeMessage() {
+  const container = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'message assistant';
+  div.innerHTML = `<div class="message-content"><p>Привет! Я — ассистент по кодовой базе. Задай вопрос о проекте.</p></div>`;
+  container.appendChild(div);
+}
+
+// === Memory ===
+
+async function loadThreadMemory(threadId) {
+  try {
+    const res = await apiFetch(`/threads/${threadId}/memory`);
+    const memory = res.data;
+    renderMemory(memory);
+  } catch (err) {
+    console.error('Ошибка загрузки памяти:', err);
+  }
+}
+
+function renderMemory(memory) {
+  const content = document.getElementById('memory-content');
+  if (!memory || memory.length === 0) {
+    content.innerHTML = '<span class="memory-empty">Нет сохраненной памяти</span>';
+    return;
+  }
+  const byType = {};
+  for (const item of memory) {
+    if (!byType[item.type]) byType[item.type] = [];
+    byType[item.type].push(item);
+  }
+  let html = '';
+  if (byType.goal) html += `<div class="memory-item"><span class="memory-label">Цель:</span> ${escapeHtml(byType.goal[0].value)}</div>`;
+  if (byType.constraint) html += byType.constraint.map(c => `<div class="memory-item"><span class="memory-label">Ограничение:</span> ${escapeHtml(c.value)}</div>`).join('');
+  if (byType.term) html += `<div class="memory-item"><span class="memory-label">Термины:</span> ${byType.term.map(t => escapeHtml(t.value)).join(', ')}</div>`;
+  if (byType.clarification) html += byType.clarification.map(c => `<div class="memory-item"><span class="memory-label">Уточнение:</span> ${escapeHtml(c.value)}</div>`).join('');
+  content.innerHTML = html;
+}
+
+async function saveMemory() {
+  if (!currentThreadId) return;
+  const goal = document.getElementById('memory-goal').value.trim();
+  const constraints = document.getElementById('memory-constraints').value.trim();
+  try {
+    if (goal) {
+      await apiFetch(`/threads/${currentThreadId}/memory`, {
+        method: 'POST',
+        body: JSON.stringify({ key: 'goal', value: goal, type: 'goal' }),
+      });
+    }
+    if (constraints) {
+      await apiFetch(`/threads/${currentThreadId}/memory`, {
+        method: 'POST',
+        body: JSON.stringify({ key: 'constraint_manual', value: constraints, type: 'constraint' }),
+      });
+    }
+    document.getElementById('memory-edit').style.display = 'none';
+    await loadThreadMemory(currentThreadId);
+  } catch (err) {
+    showError('Ошибка сохранения памяти: ' + err.message);
+  }
+}
+
+async function clearMemory() {
+  if (!currentThreadId) return;
+  try {
+    await apiFetch(`/threads/${currentThreadId}/memory/clear`, { method: 'POST' });
+    await loadThreadMemory(currentThreadId);
+  } catch (err) {
+    showError('Ошибка очистки памяти: ' + err.message);
+  }
+}
+
+async function clearChat() {
+  if (!currentThreadId) return;
+  if (!confirm('Очистить все сообщения в этом диалоге?')) return;
+  try {
+    await apiFetch(`/threads/${currentThreadId}/clear-messages`, { method: 'POST' });
+    document.getElementById('messages').innerHTML = '';
+    addWelcomeMessage();
+  } catch (err) {
+    showError('Ошибка очистки чата: ' + err.message);
+  }
+}
+
+async function deleteCurrentThread() {
+  if (!currentThreadId) return;
+  const thread = threads.find(t => t.id === currentThreadId);
+  const title = thread ? thread.title || 'без названия' : 'диалог';
+  if (!confirm(`Удалить диалог «${title}»? Сообщения и память будут удалены безвозвратно.`)) return;
+  try {
+    const deletedId = currentThreadId;
+    await apiFetch(`/threads/${deletedId}`, { method: 'DELETE' });
+    threads = threads.filter(t => t.id !== deletedId);
+    const next = threads[0] || null;
+    if (next) {
+      currentThreadId = next.id;
+      renderThreadsList();
+      await loadThreadMessages(currentThreadId);
+    } else {
+      currentThreadId = null;
+      renderThreadsList();
+      document.getElementById('messages').innerHTML = '';
+      addWelcomeMessage();
+      document.getElementById('memory-panel').style.display = 'none';
+    }
+  } catch (err) {
+    showError('Ошибка удаления диалога: ' + err.message);
+  }
+}
+
+function toggleMemoryEdit() {
+  const edit = document.getElementById('memory-edit');
+  edit.style.display = edit.style.display === 'none' ? 'flex' : 'none';
+  if (edit.style.display === 'flex') {
+    const goalItem = document.querySelector('.memory-item .memory-label');
+    document.getElementById('memory-goal').value = '';
+    document.getElementById('memory-constraints').value = '';
+  }
+}
+
+function showError(msg) {
+  console.error(msg);
+  const toast = document.getElementById('error-toast') || (() => {
+    const el = document.createElement('div');
+    el.id = 'error-toast';
+    el.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#e74c3c;color:#fff;padding:12px 20px;border-radius:8px;z-index:9999;max-width:400px;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.3);cursor:pointer';
+    el.onclick = () => el.remove();
+    document.body.appendChild(el);
+    return el;
+  })();
+  toast.textContent = msg;
+  toast.style.display = 'block';
+  clearTimeout(toast._hide);
+  toast._hide = setTimeout(() => toast.remove(), 5000);
+}
+
+// === Send ===
+
 async function sendMessage() {
   const input = document.getElementById('question-input');
   const question = input.value.trim();
@@ -177,17 +452,26 @@ async function sendMessage() {
 
   addMessage('user', question);
   input.value = '';
+
+  if (!currentThreadId) {
+    await createThread();
+  }
+
+  const sendBtn = document.getElementById('btn-send');
+  sendBtn.disabled = true;
+  sendBtn.textContent = '⏳';
   addTyping();
 
   try {
     const pipeline = getPipelineConfig();
     const hasPipeline = pipeline.queryRewrite || pipeline.reranker || pipeline.threshold != null ||
-      pipeline.topKBefore !== 20 || pipeline.topKAfter !== 5;
+      pipeline.topKBefore !== 20 || pipeline.topKAfter !== 15;
 
     const body = {
       question,
       mode: currentMode,
       pipeline: hasPipeline ? pipeline : undefined,
+      thread_id: currentThreadId,
     };
 
     const res = await apiFetch('/query', {
@@ -197,9 +481,15 @@ async function sendMessage() {
     removeTyping();
     addMessage('assistant', res.data.answer, res.data.mode, res.data.sources, res.data.pipeline,
       res.data.confidenceScore, res.data.hasEnoughContext, res.data.citations, res.data.isDontKnow);
+
+    await loadThreads();
+    await loadThreadMemory(currentThreadId);
   } catch (err) {
     removeTyping();
     addMessage('assistant', `Ошибка: ${err.message}`);
+  } finally {
+    sendBtn.disabled = false;
+    sendBtn.textContent = 'Отправить';
   }
 }
 
@@ -209,6 +499,13 @@ function togglePipelineConfig() {
   pipelineConfigOpen = !pipelineConfigOpen;
   panel.classList.toggle('open', pipelineConfigOpen);
   btn.textContent = pipelineConfigOpen ? 'Pipeline Config ▴' : 'Pipeline Config ▾';
+}
+
+function toggleAdvancedSettings() {
+  const advanced = document.getElementById('pipeline-advanced');
+  const btn = document.getElementById('btn-advanced-toggle');
+  const isOpen = advanced.classList.toggle('open');
+  btn.textContent = isOpen ? '▲ Скрыть расширенные' : '▼ Расширенные';
 }
 
 async function openCompareModal() {
@@ -319,3 +616,14 @@ document.getElementById('cfg-threshold').addEventListener('input', function() {
 document.getElementById('compare-modal').addEventListener('click', function(e) {
   if (e.target === this) closeCompareModal();
 });
+
+document.getElementById('btn-new-thread').addEventListener('click', async () => {
+  await createThread();
+});
+
+document.getElementById('btn-toggle-memory-edit').addEventListener('click', toggleMemoryEdit);
+document.getElementById('btn-save-memory').addEventListener('click', saveMemory);
+document.getElementById('btn-clear-memory').addEventListener('click', clearMemory);
+document.getElementById('btn-clear-chat').addEventListener('click', clearChat);
+
+loadThreads();

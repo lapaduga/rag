@@ -55,6 +55,8 @@ export const config = {
     topKBefore: parseInt(process.env.PIPELINE_TOP_K_BEFORE, 10) || 20,
     topKAfter: parseInt(process.env.PIPELINE_TOP_K_AFTER, 10) || 15,
     minConfidence: parseFloat(process.env.PIPELINE_MIN_CONFIDENCE) || 0.25,
+    maxHistoryMessages: parseInt(process.env.PIPELINE_MAX_HISTORY, 10) || 0,
+    memoryExtractionEnabled: process.env.PIPELINE_MEMORY_EXTRACTION === 'true',
   },
 
   rag: {

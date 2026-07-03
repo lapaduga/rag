@@ -1,6 +1,6 @@
 import BetterSqlite3 from 'better-sqlite3';
-import { readFileSync, mkdirSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { readFileSync, mkdirSync, readdirSync } from 'fs';
+import { resolve, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { config } from '../config.js';
 
@@ -24,16 +24,44 @@ class Database {
 
   migrate() {
     const migrationsDir = resolve(__dirname, 'migrations');
-    const files = ['001_init.sql', '002_pipeline.sql', '003_citations.sql'];
+
+    this.db.exec(`CREATE TABLE IF NOT EXISTS _migrations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE NOT NULL,
+      applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    const applied = new Set(
+      this.db.prepare('SELECT name FROM _migrations ORDER BY id').all().map(r => r.name)
+    );
+
+    let files;
+    try {
+      files = readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
+    } catch {
+      return this;
+    }
+
     for (const file of files) {
+      if (applied.has(file)) continue;
       const migrationPath = resolve(migrationsDir, file);
       try {
         const sql = readFileSync(migrationPath, 'utf-8');
         this.db.exec(sql);
+        this.db.prepare('INSERT INTO _migrations (name) VALUES (?)').run(file);
+        console.log(`[DB] Migration ${file} applied`);
       } catch (e) {
-        if (e.code === 'ENOENT') continue;
-        if (e.message && e.message.includes('duplicate column name')) continue;
-        throw e;
+        const ignore = e.message
+          && (e.message.includes('duplicate column name')
+            || e.message.includes('already exists')
+            || e.message.includes('UNIQUE constraint failed'));
+        if (ignore) {
+          this.db.prepare('INSERT OR IGNORE INTO _migrations (name) VALUES (?)').run(file);
+          console.log(`[DB] Migration ${file} skipped (already applied)`);
+        } else {
+          console.error(`[DB] Migration ${file} failed:`, e.message);
+          throw e;
+        }
       }
     }
     return this;
@@ -199,6 +227,126 @@ class Database {
       result[strategy] = stats || { total_chunks: 0, avg_chunk_size: 0, total_tokens: 0 };
     }
     return result;
+  }
+
+  // === Threads ===
+
+  createThread({ title, task_goal, constraints }) {
+    const stmt = this.db.prepare(`
+      INSERT INTO threads (title, task_goal, constraints)
+      VALUES (?, ?, ?)
+    `);
+    const result = stmt.run(title || 'Новый диалог', task_goal || null, constraints || null);
+    return Number(result.lastInsertRowid);
+  }
+
+  getThread(id) {
+    return this.db.prepare('SELECT * FROM threads WHERE id = ?').get(id);
+  }
+
+  getAllThreads(limit = 50) {
+    return this.db.prepare(`
+      SELECT t.*, (SELECT COUNT(*) FROM messages WHERE thread_id = t.id) as message_count
+      FROM threads t
+      ORDER BY t.updated_at DESC
+      LIMIT ?
+    `).all(limit);
+  }
+
+  updateThread(id, { title, task_goal, constraints }) {
+    const fields = [];
+    const params = [];
+    if (title !== undefined) { fields.push('title = ?'); params.push(title); }
+    if (task_goal !== undefined) { fields.push('task_goal = ?'); params.push(task_goal); }
+    if (constraints !== undefined) { fields.push('constraints = ?'); params.push(constraints); }
+    if (fields.length === 0) return;
+    fields.push("updated_at = CURRENT_TIMESTAMP");
+    params.push(id);
+    this.db.prepare(`UPDATE threads SET ${fields.join(', ')} WHERE id = ?`).run(...params);
+  }
+
+  deleteThread(id) {
+    this.db.prepare('DELETE FROM messages WHERE thread_id = ?').run(id);
+    this.db.prepare('DELETE FROM task_memory WHERE thread_id = ?').run(id);
+    this.db.prepare('DELETE FROM threads WHERE id = ?').run(id);
+  }
+
+  clearThreadMessages(id) {
+    this.db.prepare('DELETE FROM messages WHERE thread_id = ?').run(id);
+    this.db.prepare('UPDATE threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  }
+
+  // === Messages ===
+
+  saveMessage({ thread_id, role, content, sources, citations, confidence_score, has_enough_context, is_dont_know, pipeline }) {
+    this.db.prepare(`
+      INSERT INTO messages (thread_id, role, content, sources, citations, confidence_score, has_enough_context, is_dont_know, pipeline_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      thread_id,
+      role,
+      content,
+      sources ? JSON.stringify(sources) : null,
+      citations ? JSON.stringify(citations) : null,
+      confidence_score != null ? confidence_score : null,
+      has_enough_context != null ? (has_enough_context ? 1 : 0) : 1,
+      is_dont_know ? 1 : 0,
+      pipeline || null
+    );
+    this.db.prepare('UPDATE threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(thread_id);
+  }
+
+  getMessagesByThread(thread_id, limit = 100) {
+    const rows = this.db.prepare(`
+      SELECT * FROM messages WHERE thread_id = ? ORDER BY created_at ASC LIMIT ?
+    `).all(thread_id, limit);
+    return rows.map(m => ({
+      ...m,
+      sources: m.sources ? JSON.parse(m.sources) : null,
+      citations: m.citations ? JSON.parse(m.citations) : null,
+      pipeline: m.pipeline_json ? JSON.parse(m.pipeline_json) : null,
+    }));
+  }
+
+  getRecentMessages(thread_id, limit) {
+    const rows = limit
+      ? this.db.prepare('SELECT * FROM messages WHERE thread_id = ? ORDER BY created_at DESC LIMIT ?').all(thread_id, limit)
+      : this.db.prepare('SELECT * FROM messages WHERE thread_id = ? ORDER BY created_at DESC').all(thread_id);
+    return rows.map(m => ({
+      ...m,
+      sources: m.sources ? JSON.parse(m.sources) : null,
+      citations: m.citations ? JSON.parse(m.citations) : null,
+      pipeline: m.pipeline_json ? JSON.parse(m.pipeline_json) : null,
+    })).reverse();
+  }
+
+  // === Task Memory ===
+
+  setTaskMemory({ thread_id, key, value, type }) {
+    this.db.prepare(`
+      INSERT OR REPLACE INTO task_memory (thread_id, key, value, type)
+      VALUES (?, ?, ?, ?)
+    `).run(thread_id, key, value, type);
+  }
+
+  getTaskMemory(thread_id) {
+    return this.db.prepare('SELECT * FROM task_memory WHERE thread_id = ? ORDER BY created_at ASC').all(thread_id);
+  }
+
+  getTaskMemoryByType(thread_id, type) {
+    return this.db.prepare('SELECT * FROM task_memory WHERE thread_id = ? AND type = ? ORDER BY created_at ASC').all(thread_id, type);
+  }
+
+  deleteTaskMemory(id) {
+    this.db.prepare('DELETE FROM task_memory WHERE id = ?').run(id);
+  }
+
+  deleteTaskMemoryByKey(thread_id, key) {
+    this.db.prepare('DELETE FROM task_memory WHERE thread_id = ? AND key = ?').run(thread_id, key);
+  }
+
+  clearTaskMemory(thread_id) {
+    this.db.prepare('DELETE FROM task_memory WHERE thread_id = ?').run(thread_id);
   }
 }
 

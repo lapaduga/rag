@@ -1,4 +1,5 @@
 import { CitationParser } from '../citation-parser/index.js';
+import { MemoryManager } from '../memory/index.js';
 import { config } from '../config.js';
 
 export class RagPipeline {
@@ -10,6 +11,7 @@ export class RagPipeline {
     this.llm = llm;
     this.config = config || {};
     this.citationParser = new CitationParser();
+    this.memoryManager = new MemoryManager(llm);
   }
 
   async execute(question, options = {}) {
@@ -61,15 +63,19 @@ export class RagPipeline {
     }
 
     const t4 = Date.now();
-    chunks = chunks.slice(0, topKAfter);
+    const topKChunks = chunks.slice(0, topKAfter);
+    const contentMatchChunks = chunks.filter(c =>
+      (c._contentKwMatches || 0) > 0 && !topKChunks.find(t => t.chunk_id === c.chunk_id)
+    ).slice(0, 10);
+    chunks = [...topKChunks, ...contentMatchChunks];
     stages.push({ stage: 'topK', count: chunks.length, time_ms: Date.now() - t4 });
 
-    const confidenceScore = chunks.length > 0
-      ? chunks.reduce((sum, c) => {
-          const kwBoost = 0.2 * ((c._keywordScore?.matched || 0) + (c._contentKwMatches || 0));
+    const confidenceScore = topKChunks.length > 0
+      ? topKChunks.reduce((sum, c) => {
+          const kwBoost = 0.2 * ((c._keywordScore?.matched || 0));
           const raw = c.combinedScore ?? ((c.similarity || 0) + kwBoost);
           return sum + Math.min(1.0, Math.max(0, raw));
-        }, 0) / chunks.length
+        }, 0) / topKChunks.length
       : 0;
 
     const minConfidence = options.minConfidence ?? this.config.minConfidence ?? 0.25;
@@ -90,7 +96,13 @@ export class RagPipeline {
       };
     }
 
-    const messages = this.augmenter.buildPrompt(question, chunks, 'rag');
+    const memoryContext = this.memoryManager?.buildMemoryContext(options.taskMemory || []) || '';
+
+    const historyContext = (options.history || []).length > 0
+      ? (options.history || []).map(m => `${m.role === 'user' ? 'Пользователь' : 'Ассистент'}: ${m.content}`).join('\n')
+      : '';
+
+    const messages = this.augmenter.buildPrompt(question, chunks, 'rag', { memoryContext, historyContext });
     const t5 = Date.now();
     const result = await this.llm.chat(messages);
     stages.push({ stage: 'llm', time_ms: Date.now() - t5 });

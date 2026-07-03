@@ -28,25 +28,59 @@
     <div class="pipeline-config" id="pipeline-config">
       <div class="pipeline-config-body">
         <label class="pipeline-check">
-          <input type="checkbox" id="cfg-rewrite"> Query Rewrite
+          <input type="checkbox" id="cfg-reranker" checked> Ранкер
         </label>
         <label class="pipeline-check">
-          <input type="checkbox" id="cfg-reranker"> Reranker
-        </label>
-        <label class="pipeline-check">
-          <input type="checkbox" id="cfg-threshold-enable"> Threshold Filter
+          <input type="checkbox" id="cfg-threshold-enable"> Фильтр
           <input type="range" id="cfg-threshold" min="0" max="1" step="0.05" value="0.5" class="pipeline-range" disabled>
           <span class="pipeline-range-value" id="cfg-threshold-value">0.5</span>
         </label>
-        <div class="pipeline-number-group">
-          <label>Retrieval Top-K: <input type="number" id="cfg-topk-before" value="20" min="1" max="100" class="pipeline-number"></label>
-          <label>Final Top-K: <input type="number" id="cfg-topk-after" value="15" min="1" max="50" class="pipeline-number"></label>
+        <span class="pipeline-advanced-toggle" id="btn-advanced-toggle" onclick="toggleAdvancedSettings()">▼ Расширенные</span>
+      </div>
+      <div class="pipeline-advanced" id="pipeline-advanced">
+        <div class="pipeline-advanced-body">
+          <label class="pipeline-check">
+            <input type="checkbox" id="cfg-rewrite"> Query Rewrite
+          </label>
+          <div class="pipeline-number-group">
+            <label>Retrieval Top-K: <input type="number" id="cfg-topk-before" value="20" min="1" max="200" class="pipeline-number"></label>
+            <label>Final Top-K: <input type="number" id="cfg-topk-after" value="15" min="1" max="50" class="pipeline-number"></label>
+          </div>
         </div>
       </div>
     </div>
 
     <div class="chat-layout">
+      <aside class="threads-sidebar" id="threads-sidebar">
+        <div class="threads-header">
+          <h2>Диалоги</h2>
+          <button id="btn-new-thread" class="btn btn-primary btn-sm">+ Новый</button>
+        </div>
+        <div class="threads-list" id="threads-list">
+          <div class="empty-state">Загрузка...</div>
+        </div>
+      </aside>
+
       <div class="chat-main">
+        <div class="memory-panel" id="memory-panel" style="display:none;">
+          <div class="memory-header">
+            <span class="memory-title">Память задачи</span>
+            <div class="memory-actions">
+              <button class="btn btn-sm btn-secondary" id="btn-toggle-memory-edit">Ред.</button>
+              <button class="btn btn-sm btn-secondary" id="btn-clear-memory">Очистить память</button>
+              <button class="btn btn-sm btn-danger" id="btn-clear-chat">Очистить чат</button>
+            </div>
+          </div>
+          <div class="memory-content" id="memory-content">
+            <span class="memory-empty">Нет сохраненной памяти</span>
+          </div>
+          <div class="memory-edit" id="memory-edit" style="display:none;">
+            <input type="text" id="memory-goal" placeholder="Цель диалога...">
+            <input type="text" id="memory-constraints" placeholder="Ограничения...">
+            <button class="btn btn-sm btn-primary" id="btn-save-memory">Сохранить</button>
+          </div>
+        </div>
+
         <div class="messages" id="messages">
           <div class="message assistant">
             <div class="message-content">
