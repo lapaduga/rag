@@ -68,6 +68,7 @@ function addMessage(role, text, mode, sources, pipeline) {
   let pipelineHtml = '';
   if (pipeline && pipeline.stages && pipeline.stages.length > 0) {
     const stageLabels = {
+      translate: { label: 'Translate', color: 'stage-translate' },
       rewrite: { label: 'Rewrite', color: 'stage-rewrite' },
       retrieval: { label: 'Retrieval', color: 'stage-retrieval' },
       rerank: { label: 'Rerank', color: 'stage-rerank' },

@@ -609,6 +609,7 @@ html, body {
 }
 
 /* Stage colors */
+.stage-translate .stage-name { color: #9b59b6; }
 .stage-rewrite .stage-name { color: #4fc1ff; }
 .stage-retrieval .stage-name { color: #4ec9b0; }
 .stage-rerank .stage-name { color: #ce9178; }

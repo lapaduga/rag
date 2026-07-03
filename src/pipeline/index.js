@@ -21,9 +21,16 @@ export class RagPipeline {
     let query = question;
     let rewrittenQuery = null;
 
+    const isCyrillic = /[а-яё]/i.test(query);
+    if (isCyrillic) {
+      const t0 = Date.now();
+      query = await this.llm.translateQuery(question);
+      stages.push({ stage: 'translate', query, time_ms: Date.now() - t0 });
+    }
+
     if (doRewrite && this.rewriter) {
       const t0 = Date.now();
-      query = await this.rewriter.rewrite(question);
+      query = await this.rewriter.rewrite(query);
       rewrittenQuery = query;
       stages.push({ stage: 'rewrite', query, time_ms: Date.now() - t0 });
     }

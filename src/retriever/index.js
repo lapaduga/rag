@@ -27,6 +27,23 @@ const RU_TO_EN = {
   'страница':'page','страницы':'page',
   'форма':'form','формы':'form',
   'таблица':'table','таблицы':'table',
+  'событие':'event','события':'event','событий':'event',
+  'обработчик':'handler','обработчики':'handler','обработчика':'handler','обработчиков':'handler',
+  'навешивание':'attach','навешивания':'attach','навешивать':'attach','навешиваются':'attach',
+  'подписка':'subscribe','подписки':'subscribe','подписку':'subscribe',
+  'подписчик':'listener','подписчики':'listener',
+  'колбэк':'callback','колбэка':'callback','колбэке':'callback',
+  'асинхронный':'async','асинхронная':'async','асинхронного':'async',
+  'запрос':'request','запроса':'request','запросы':'request',
+  'ответ':'response','ответа':'response',
+  'роут':'route','роута':'route','роуты':'route',
+  'контроллер':'controller','контроллера':'controller',
+  'переменная':'variable','переменные':'variable','переменной':'variable',
+  'значение':'value','значения':'value',
+  'свойство':'property','свойства':'property',
+  'метод':'method','метода':'method','методы':'method',
+  'аргумент':'argument','аргумента':'argument','аргументы':'argument',
+  'параметр':'parameter','параметра':'parameter','параметры':'parameter',
 };
 
 const RU_TO_LATIN = {
