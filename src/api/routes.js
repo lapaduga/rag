@@ -249,48 +249,6 @@ router.post('/query', async (req, res, next) => {
   }
 });
 
-router.post('/query/compare', async (req, res, next) => {
-  try {
-    const { question, pipelines } = req.body;
-    if (!question) {
-      return res.status(400).json({ error: true, message: 'Поле "question" обязательно' });
-    }
-    if (!pipelines || !Array.isArray(pipelines) || pipelines.length === 0) {
-      return res.status(400).json({ error: true, message: 'Поле "pipelines" обязательно и должно быть массивом' });
-    }
-
-    const results = [];
-    for (const pipeCfg of pipelines) {
-      const cfg = {
-        queryRewrite: pipeCfg.queryRewrite ?? false,
-        reranker: pipeCfg.reranker ?? false,
-        threshold: pipeCfg.threshold,
-        topKBefore: pipeCfg.topKBefore ?? config.pipeline?.topKBefore ?? 20,
-        topKAfter: pipeCfg.topKAfter ?? config.pipeline?.topKAfter ?? 5,
-      };
-
-      const pipelineResult = await ragPipeline.execute(question, cfg);
-
-      results.push({
-        name: pipeCfg.name || 'unnamed',
-        config: cfg,
-        answer: pipelineResult.answer,
-        sources: pipelineResult.sources,
-        citations: pipelineResult.citations || [],
-        confidenceScore: pipelineResult.confidenceScore,
-        hasEnoughContext: pipelineResult.hasEnoughContext,
-        isDontKnow: pipelineResult.isDontKnow || false,
-        pipeline: pipelineResult.pipeline,
-        timing: pipelineResult.timing,
-      });
-    }
-
-    res.json({ success: true, data: results });
-  } catch (err) {
-    next(err);
-  }
-});
-
 // === Threads ===
 
 router.post('/threads', async (req, res, next) => {

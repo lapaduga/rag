@@ -519,86 +519,6 @@ function toggleMemorySection() {
   arrow.classList.toggle('open', isOpen);
 }
 
-async function openCompareModal() {
-  const input = document.getElementById('question-input');
-  const question = input.value.trim();
-  if (!question) return;
-
-  const modal = document.getElementById('compare-modal');
-  const body = document.getElementById('compare-modal-body');
-  body.innerHTML = '<div class="empty-state">Загрузка...</div>';
-  modal.classList.remove('hidden');
-
-  const pipelines = [
-    { name: 'baseline', queryRewrite: false, reranker: false, threshold: null, topKBefore: 20, topKAfter: 5 },
-    { name: 'filter', queryRewrite: false, reranker: false, threshold: 0.5, topKBefore: 20, topKAfter: 5 },
-    { name: 'rerank', queryRewrite: false, reranker: true, threshold: null, topKBefore: 20, topKAfter: 5 },
-    { name: 'full', queryRewrite: true, reranker: true, threshold: 0.5, topKBefore: 20, topKAfter: 5 },
-  ];
-
-  try {
-    const res = await apiFetch('/query/compare', {
-      method: 'POST',
-      body: JSON.stringify({ question, pipelines }),
-    });
-
-    const data = res.data;
-    body.innerHTML = `
-      <div class="compare-grid">
-        ${data.map((r, idx) => {
-          const totalTime = r.timing?.total || 0;
-          const bestTime = Math.min(...data.map(d => d.timing?.total || Infinity));
-          const bestSources = Math.max(...data.map(d => d.sources?.length || 0));
-          const isBestTime = totalTime <= bestTime + 50;
-          const isBestSources = (r.sources?.length || 0) >= bestSources;
-
-          return `
-            <div class="compare-col ${isBestTime && isBestSources ? 'compare-best' : ''}">
-              <div class="compare-col-header ${r.name}">${r.name.toUpperCase()}</div>
-              <div class="compare-col-body">
-                <div class="compare-answer">${escapeHtml(r.answer)}</div>
-                <div class="compare-meta-row">
-                  <span class="compare-label">Источники:</span>
-                  <span class="compare-value">${r.sources?.length || 0}</span>
-                  ${isBestSources ? '<span class="compare-badge">best</span>' : ''}
-                </div>
-                <div class="compare-meta-row">
-                  <span class="compare-label">Цитаты:</span>
-                  <span class="compare-value">${r.citations?.length || 0}</span>
-                </div>
-                <div class="compare-meta-row">
-                  <span class="compare-label">Валидные:</span>
-                  <span class="compare-value">${r.citations?.filter(c => c.isValid).length || 0}</span>
-                </div>
-                <div class="compare-meta-row">
-                  <span class="compare-label">Не знаю:</span>
-                  <span class="compare-value">${r.isDontKnow ? 'Да' : 'Нет'}</span>
-                </div>
-                <div class="compare-meta-row">
-                  <span class="compare-label">Время:</span>
-                  <span class="compare-value">${formatTiming(totalTime)}</span>
-                  ${isBestTime ? '<span class="compare-badge">best</span>' : ''}
-                </div>
-                <div class="compare-stages">
-                  ${(r.pipeline?.stages || []).map(st =>
-                    `<div class="compare-stage"><span>${st.stage}</span><span>${formatTiming(st.time_ms)}</span></div>`
-                  ).join('')}
-                </div>
-              </div>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    `;
-  } catch (err) {
-    body.innerHTML = `<div class="empty-state">Ошибка: ${err.message}</div>`;
-  }
-}
-
-function closeCompareModal() {
-  document.getElementById('compare-modal').classList.add('hidden');
-}
-
 document.querySelectorAll('.mode-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
@@ -608,7 +528,6 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
 });
 
 document.getElementById('btn-send').addEventListener('click', sendMessage);
-document.getElementById('btn-compare').addEventListener('click', openCompareModal);
 document.getElementById('question-input').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -622,10 +541,6 @@ document.getElementById('cfg-threshold-enable').addEventListener('change', funct
 
 document.getElementById('cfg-threshold').addEventListener('input', function() {
   document.getElementById('cfg-threshold-value').textContent = this.value;
-});
-
-document.getElementById('compare-modal').addEventListener('click', function(e) {
-  if (e.target === this) closeCompareModal();
 });
 
 document.getElementById('memory-section-toggle').addEventListener('click', toggleMemorySection);
