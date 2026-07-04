@@ -5,7 +5,7 @@ export class Reranker {
     this.modelName = options.model || 'Xenova/ms-marco-MiniLM-L-6-v2';
   }
 
-  async rerank(query, chunks) {
+  async rerank(query, chunks, batchSize = 20) {
     if (chunks.length === 0) return chunks;
 
     const { AutoTokenizer, AutoModelForSequenceClassification } = await import('@xenova/transformers');
@@ -18,17 +18,21 @@ export class Reranker {
     }
 
     const q = String(query);
-    const docs = chunks.map(c => String(c.content || ''));
-    const queries = Array(docs.length).fill(q);
-
-    const inputs = await this.tokenizer(queries, { text_pair: docs, padding: true, truncation: true });
-    const outputs = await this.model(inputs);
-
     const scores = [];
-    for (const logits of outputs.logits) {
-      const data = Array.from(logits.data);
-      const score = 1 / (1 + Math.exp(-data[0]));
-      scores.push(score);
+
+    for (let i = 0; i < chunks.length; i += batchSize) {
+      const batch = chunks.slice(i, i + batchSize);
+      const docs = batch.map(c => String(c.content || ''));
+      const queries = Array(docs.length).fill(q);
+
+      const inputs = await this.tokenizer(queries, { text_pair: docs, padding: true, truncation: true });
+      const outputs = await this.model(inputs);
+
+      for (const logits of outputs.logits) {
+        const data = Array.from(logits.data);
+        const score = 1 / (1 + Math.exp(-data[0]));
+        scores.push(score);
+      }
     }
 
     const maxScore = scores.length > 0 ? Math.max(...scores) : 1;
