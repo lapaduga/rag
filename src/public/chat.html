@@ -17,18 +17,18 @@
       </div>
       <div class="chat-header-controls">
         <div class="mode-selector">
-          <button class="mode-btn active" data-mode="auto">Auto</button>
-          <button class="mode-btn" data-mode="rag">RAG</button>
+          <button class="mode-btn" data-mode="auto">Auto</button>
+          <button class="mode-btn active" data-mode="rag">RAG</button>
           <button class="mode-btn" data-mode="no-rag">No RAG</button>
         </div>
-        <button class="btn btn-secondary btn-sm pipeline-toggle" id="btn-pipeline-toggle" onclick="togglePipelineConfig()">Pipeline Config ▾</button>
+        <button class="btn btn-secondary btn-sm pipeline-toggle" id="btn-pipeline-toggle" onclick="togglePipelineConfig()">Pipeline ▾</button>
       </div>
     </header>
 
     <div class="pipeline-config" id="pipeline-config">
       <div class="pipeline-config-body">
         <label class="pipeline-check">
-          <input type="checkbox" id="cfg-reranker" checked> Ранкер
+          <input type="checkbox" id="cfg-reranker"> Ранкер
         </label>
         <label class="pipeline-check">
           <input type="checkbox" id="cfg-threshold-enable"> Фильтр
@@ -59,28 +59,30 @@
         <div class="threads-list" id="threads-list">
           <div class="empty-state">Загрузка...</div>
         </div>
-      </aside>
-
-      <div class="chat-main">
-        <div class="memory-panel" id="memory-panel" style="display:none;">
-          <div class="memory-header">
-            <span class="memory-title">Память задачи</span>
+        <div class="sidebar-section memory-section" id="memory-section">
+          <div class="sidebar-section-header" id="memory-section-toggle">
+            <h3>Память задачи</h3>
+            <span class="sidebar-section-arrow" id="memory-section-arrow">▸</span>
+          </div>
+          <div class="sidebar-section-body" id="memory-section-body">
+            <div class="memory-content" id="memory-content">
+              <span class="memory-empty">Нет сохраненной памяти</span>
+            </div>
+            <div class="memory-edit" id="memory-edit" style="display:none;">
+              <input type="text" id="memory-goal" placeholder="Цель диалога...">
+              <input type="text" id="memory-constraints" placeholder="Ограничения...">
+              <button class="btn btn-sm btn-primary" id="btn-save-memory">Сохранить</button>
+            </div>
             <div class="memory-actions">
               <button class="btn btn-sm btn-secondary" id="btn-toggle-memory-edit">Ред.</button>
               <button class="btn btn-sm btn-secondary" id="btn-clear-memory">Очистить память</button>
               <button class="btn btn-sm btn-danger" id="btn-clear-chat">Очистить чат</button>
             </div>
           </div>
-          <div class="memory-content" id="memory-content">
-            <span class="memory-empty">Нет сохраненной памяти</span>
-          </div>
-          <div class="memory-edit" id="memory-edit" style="display:none;">
-            <input type="text" id="memory-goal" placeholder="Цель диалога...">
-            <input type="text" id="memory-constraints" placeholder="Ограничения...">
-            <button class="btn btn-sm btn-primary" id="btn-save-memory">Сохранить</button>
-          </div>
         </div>
+      </aside>
 
+      <div class="chat-main">
         <div class="messages" id="messages">
           <div class="message assistant">
             <div class="message-content">

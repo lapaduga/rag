@@ -9,7 +9,7 @@ export class Embedder {
   async generateEmbedding(text) {
     const pipe = await this._getPipeline();
     const result = await pipe(text, { pooling: 'mean', normalize: true });
-    return Array.from(result.data);
+    return new Float32Array(result.data);
   }
 
   async generateEmbeddings(texts) {
@@ -22,7 +22,7 @@ export class Embedder {
       for (let j = 0; j < batch.length; j++) {
         const start = j * result.dims[1];
         const end = start + result.dims[1];
-        results.push(Array.from(result.data.slice(start, end)));
+        results.push(result.data.slice(start, end));
       }
       if (texts.length > batchSize) {
         await new Promise(r => setImmediate(r));

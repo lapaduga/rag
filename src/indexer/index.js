@@ -246,7 +246,7 @@ export class Indexer {
       const texts = chunks.map(c => `[${meta.filename}]\n${c.content}`);
       const embeddings = await this.embedder.generateEmbeddings(texts);
       for (let i = 0; i < chunks.length; i++) {
-        chunks[i].embedding = JSON.stringify(embeddings[i]);
+        chunks[i].embedding = Buffer.from(embeddings[i].buffer);
       }
     } catch (err) {
       console.warn(`[WARN] Embedding failed for ${filePath}: ${err.message}`);

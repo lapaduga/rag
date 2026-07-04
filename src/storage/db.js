@@ -157,7 +157,9 @@ class Database {
     return rows.map(c => ({
       ...c,
       metadata: typeof c.metadata === 'string' ? JSON.parse(c.metadata) : c.metadata,
-      embedding: typeof c.embedding === 'string' ? JSON.parse(c.embedding) : c.embedding,
+      embedding: c.embedding instanceof Buffer
+        ? new Float32Array(c.embedding.buffer, c.embedding.byteOffset, c.embedding.byteLength / 4)
+        : (typeof c.embedding === 'string' ? JSON.parse(c.embedding) : c.embedding),
     }));
   }
 

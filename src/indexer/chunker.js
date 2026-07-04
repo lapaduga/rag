@@ -79,7 +79,6 @@ export class Chunker {
     const lines = content.split('\n');
     let currentSection = [];
     let currentTitle = '';
-    let index = 0;
 
     for (const line of lines) {
       const headerMatch = line.match(/^(#{2,3})\s+(.+)/);
@@ -87,8 +86,7 @@ export class Chunker {
         if (currentSection.length > 0) {
           const chunkText = currentSection.join('\n').trim();
           if (chunkText) {
-            chunks.push(this._makeChunk(chunkText, metadata, index, chunks.length + 1, currentTitle));
-            index++;
+            chunks.push({ text: chunkText, title: currentTitle });
           }
           currentSection = [];
         }
@@ -100,15 +98,12 @@ export class Chunker {
     if (currentSection.length > 0) {
       const chunkText = currentSection.join('\n').trim();
       if (chunkText) {
-        chunks.push(this._makeChunk(chunkText, metadata, index, chunks.length + 1, currentTitle));
+        chunks.push({ text: chunkText, title: currentTitle });
       }
     }
 
-    for (const chunk of chunks) {
-      chunk.total_chunks = chunks.length;
-    }
-
-    return chunks;
+    const total = chunks.length;
+    return chunks.map((c, i) => this._makeChunk(c.text, metadata, i, total, c.title));
   }
 
   _chunkByCodeStructure(content, metadata) {
@@ -116,6 +111,7 @@ export class Chunker {
     const patterns = [
       { regex: /^(export\s+)?(async\s+)?function\s+(\w+)/gm, section: 'functions' },
       { regex: /^(export\s+)?class\s+(\w+)/gm, section: 'classes' },
+      { regex: /^(export\s+)?(default\s+)?(const|let|var)\s+(\w+)\s*=\s*(?:\([^)]*\)\s*|\(\)\s*|[\w]+\s*)=>\s*/gm, section: 'functions' },
       { regex: /^(import\s+)/gm, section: 'imports' },
     ];
 
@@ -140,7 +136,16 @@ export class Chunker {
             currentBlock = [];
           }
           currentSection = pattern.section;
-          const name = pattern.section === 'imports' ? 'imports' : (match[3] || match[2] || '');
+          let name = metadata.filename;
+          if (pattern.section === 'imports') {
+            name = 'imports';
+          } else if (match[4]) {
+            name = match[4];
+          } else if (match[3]) {
+            name = match[3];
+          } else if (match[2]) {
+            name = match[2];
+          }
           currentTitle = name || metadata.filename;
           matched = true;
           break;
@@ -157,29 +162,22 @@ export class Chunker {
       }
     }
 
-    let index = 0;
     for (const seg of segments) {
       if (seg.text.length > this.fixedCharSize) {
         const subChunks = this._splitLargeBlock(seg.text, metadata);
         for (const sub of subChunks) {
-          chunks.push(this._makeChunk(sub, metadata, index, segments.length, seg.title, seg.section));
-          index++;
+          chunks.push({ text: sub, title: seg.title, section: seg.section });
         }
       } else {
-        chunks.push(this._makeChunk(seg.text, metadata, index, segments.length, seg.title, seg.section));
-        index++;
+        chunks.push({ text: seg.text, title: seg.title, section: seg.section });
       }
     }
 
-    for (const chunk of chunks) {
-      chunk.total_chunks = chunks.length;
-    }
-
-    return chunks;
+    const total = chunks.length;
+    return chunks.map((c, i) => this._makeChunk(c.text, metadata, i, total, c.title, c.section));
   }
 
   _chunkByJsonKeys(content, metadata) {
-    const chunks = [];
     let parsed;
     try {
       parsed = JSON.parse(content);
@@ -188,28 +186,19 @@ export class Chunker {
     }
 
     const entries = typeof parsed === 'object' && parsed !== null ? Object.entries(parsed) : [['root', content]];
-    let index = 0;
-
-    for (const [key, value] of entries) {
+    const chunks = entries.map(([key, value], index) => {
       const chunkText = JSON.stringify({ [key]: value }, null, 2);
-      if (chunkText.trim().length > 0) {
-        chunks.push(this._makeChunk(chunkText, metadata, index, entries.length, key, 'json-key'));
-        index++;
-      }
-    }
+      return { text: chunkText, title: key, section: 'json-key' };
+    }).filter(c => c.text.trim().length > 0);
 
-    for (const chunk of chunks) {
-      chunk.total_chunks = chunks.length;
-    }
-
-    return chunks;
+    const total = chunks.length;
+    return chunks.map((c, i) => this._makeChunk(c.text, metadata, i, total, c.title, c.section));
   }
 
   _chunkBySections(content, metadata) {
     const chunks = [];
     const lines = content.split('\n');
     let currentBlock = [];
-    let index = 0;
     let currentTitle = '';
 
     for (const line of lines) {
@@ -218,8 +207,7 @@ export class Chunker {
         if (currentBlock.length > 0) {
           const text = currentBlock.join('\n').trim();
           if (text) {
-            chunks.push(this._makeChunk(text, metadata, index, chunks.length + 1, currentTitle));
-            index++;
+            chunks.push({ text, title: currentTitle });
           }
           currentBlock = [];
         }
@@ -231,15 +219,12 @@ export class Chunker {
     if (currentBlock.length > 0) {
       const text = currentBlock.join('\n').trim();
       if (text) {
-        chunks.push(this._makeChunk(text, metadata, index, chunks.length + 1, currentTitle));
+        chunks.push({ text, title: currentTitle });
       }
     }
 
-    for (const chunk of chunks) {
-      chunk.total_chunks = chunks.length;
-    }
-
-    return chunks;
+    const total = chunks.length;
+    return chunks.map((c, i) => this._makeChunk(c.text, metadata, i, total, c.title));
   }
 
   _splitLargeBlock(text, metadata) {

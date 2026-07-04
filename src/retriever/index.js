@@ -171,6 +171,16 @@ export class Retriever {
       const queryEmbedding = await this.embedder.generateEmbedding(q);
       const keywords = extractKeywords(q);
 
+      const totalChunks = chunks.length;
+      for (const kw of keywords) {
+        if (!kw.english || CONTENT_KW_STOP.has(kw.english)) continue;
+        let df = 0;
+        for (const ch of chunks) {
+          if (ch.content.toLowerCase().includes(kw.english)) df++;
+        }
+        kw.idfWeight = Math.max(0, Math.log(totalChunks / (df + 1)) / Math.log(1 + totalChunks));
+      }
+
       for (const chunk of chunks) {
         if (!chunk.embedding) continue;
         const key = chunk.chunk_id;
@@ -182,15 +192,17 @@ export class Retriever {
         const fnameRel = chunk.document_path
           ? filenameRelevance(keywords, chunk.document_path)
           : filenameRelevance(keywords, filename);
-        const kwInContent = keywords.filter(kw =>
+        const rawKwMatches = keywords.filter(kw =>
           kw.english && !CONTENT_KW_STOP.has(kw.english) && chunk.content.toLowerCase().includes(kw.english)
-        ).length;
+        );
+        const kwInContent = rawKwMatches.length;
         const passesVector = sim >= threshold;
         const passesKeyword = keywords.length > 0 && fnameRel.coverage >= 0.3;
         const passesContent = kwInContent >= 1;
 
         if (passesVector || passesKeyword || passesContent) {
           seen.add(key);
+          const contentKwWeighted = rawKwMatches.reduce((sum, kw) => sum + (kw.idfWeight || 1), 0);
           allScored.push({
             chunk_id: chunk.chunk_id,
             content: chunk.content,
@@ -200,7 +212,7 @@ export class Retriever {
             document_id: chunk.document_id,
             metadata: meta,
             _keywordScore: fnameRel,
-            _contentKwMatches: kwInContent,
+            _contentKwMatches: contentKwWeighted,
           });
         }
       }
@@ -211,8 +223,10 @@ export class Retriever {
       const bSim = b.similarity;
       const aKw = a._keywordScore.matched;
       const bKw = b._keywordScore.matched;
-      const aBoost = aKw >= 2 ? Math.min(0.5, 0.2 * aKw) : 0;
-      const bBoost = bKw >= 2 ? Math.min(0.5, 0.2 * bKw) : 0;
+      const aCkw = a._contentKwMatches || 0;
+      const bCkw = b._contentKwMatches || 0;
+      const aBoost = Math.min(0.5, 0.15 * aKw + 0.2 * aCkw);
+      const bBoost = Math.min(0.5, 0.15 * bKw + 0.2 * bCkw);
       return (bSim + bBoost) - (aSim + aBoost);
     });
 
@@ -226,7 +240,13 @@ export class Retriever {
 
   async _getAllCached() {
     if (this._cache) return this._cache;
-    this._cache = db.getAllChunksWithEmbeddings();
+    const chunks = db.getAllChunksWithEmbeddings();
+    for (const chunk of chunks) {
+      if (Array.isArray(chunk.embedding)) {
+        chunk.embedding = new Float32Array(chunk.embedding);
+      }
+    }
+    this._cache = chunks;
     return this._cache;
   }
 

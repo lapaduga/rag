@@ -32,8 +32,8 @@ export const config = {
   chunking: {
     chunkSize: parseInt(process.env.CHUNK_SIZE, 10) || 250,
     overlap: parseInt(process.env.CHUNK_OVERLAP, 10) || 30,
-    fixedCharSize: 1000,
-    fixedCharOverlap: 100,
+    fixedCharSize: parseInt(process.env.CHUNK_SIZE, 10) || 1000,
+    fixedCharOverlap: parseInt(process.env.CHUNK_OVERLAP, 10) || 100,
   },
 
   chat: {

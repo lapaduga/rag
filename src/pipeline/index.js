@@ -1,6 +1,6 @@
 import { CitationParser } from '../citation-parser/index.js';
 import { MemoryManager } from '../memory/index.js';
-import { config } from '../config.js';
+import { config as appConfig } from '../config.js';
 
 export class RagPipeline {
   constructor({ retriever, reranker, rewriter, augmenter, llm, config }) {
@@ -44,7 +44,7 @@ export class RagPipeline {
     const t1 = Date.now();
     let chunks = await this.retriever.search(query, {
       topK: Math.max(topKBefore, topKAfter, 200),
-      threshold: this.config.similarityThreshold ?? 0.0,
+      threshold: appConfig.rag.similarityThreshold,
     });
     stages.push({ stage: 'retrieval', count: chunks.length, time_ms: Date.now() - t1 });
 
@@ -64,9 +64,10 @@ export class RagPipeline {
 
     const t4 = Date.now();
     const topKChunks = chunks.slice(0, topKAfter);
-    const contentMatchChunks = chunks.filter(c =>
-      (c._contentKwMatches || 0) > 0 && !topKChunks.find(t => t.chunk_id === c.chunk_id)
-    ).slice(0, 10);
+    const contentMatchChunks = chunks
+      .filter(c => (c._contentKwMatches || 0) > 0 && !topKChunks.find(t => t.chunk_id === c.chunk_id))
+      .sort((a, b) => (b._contentKwMatches || 0) - (a._contentKwMatches || 0))
+      .slice(0, Math.max(topKAfter, 50));
     chunks = [...topKChunks, ...contentMatchChunks];
     stages.push({ stage: 'topK', count: chunks.length, time_ms: Date.now() - t4 });
 
@@ -120,7 +121,7 @@ export class RagPipeline {
       sources: chunks.map(c => {
         const meta = typeof c.metadata === 'string' ? JSON.parse(c.metadata) : c.metadata;
         const fullPath = meta?.source || '';
-        const root = config.documents.path.replace(/\\/g, '/').replace(/\/$/, '');
+        const root = appConfig.documents.path.replace(/\\/g, '/').replace(/\/$/, '');
         const baseDir = root.split('/').pop();
         const relPath = fullPath.startsWith(root) ? baseDir + fullPath.slice(root.length) : fullPath;
         return {

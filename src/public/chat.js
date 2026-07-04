@@ -1,5 +1,5 @@
 const API = '/api';
-let currentMode = 'auto';
+let currentMode = 'rag';
 let pipelineConfigOpen = false;
 let currentThreadId = null;
 let threads = [];
@@ -243,7 +243,6 @@ function renderThreadsList() {
             renderThreadsList();
             document.getElementById('messages').innerHTML = '';
             addWelcomeMessage();
-            document.getElementById('memory-panel').style.display = 'none';
           }
         } else {
           renderThreadsList();
@@ -263,8 +262,6 @@ async function createThread() {
     });
     currentThreadId = res.data.id;
     await loadThreads();
-    await loadThreadMessages(currentThreadId);
-    document.getElementById('memory-panel').style.display = 'block';
     document.getElementById('messages').innerHTML = '';
     addWelcomeMessage();
   } catch (err) {
@@ -281,7 +278,6 @@ async function switchThread(threadId) {
   });
 
   await loadThreadMessages(threadId);
-  document.getElementById('memory-panel').style.display = 'block';
 }
 
 async function loadThreadMessages(threadId) {
@@ -343,6 +339,15 @@ function renderMemory(memory) {
   if (byType.term) html += `<div class="memory-item"><span class="memory-label">Термины:</span> ${byType.term.map(t => escapeHtml(t.value)).join(', ')}</div>`;
   if (byType.clarification) html += byType.clarification.map(c => `<div class="memory-item"><span class="memory-label">Уточнение:</span> ${escapeHtml(c.value)}</div>`).join('');
   content.innerHTML = html;
+  const body = document.getElementById('memory-section-body');
+  const arrow = document.getElementById('memory-section-arrow');
+  if (html) {
+    body.classList.add('open');
+    arrow.classList.add('open');
+  } else {
+    body.classList.remove('open');
+    arrow.classList.remove('open');
+  }
 }
 
 async function saveMemory() {
@@ -359,7 +364,7 @@ async function saveMemory() {
     if (constraints) {
       await apiFetch(`/threads/${currentThreadId}/memory`, {
         method: 'POST',
-        body: JSON.stringify({ key: 'constraint_manual', value: constraints, type: 'constraint' }),
+        body: JSON.stringify({ key: 'constraint_' + Date.now(), value: constraints, type: 'constraint' }),
       });
     }
     document.getElementById('memory-edit').style.display = 'none';
@@ -410,7 +415,6 @@ async function deleteCurrentThread() {
       renderThreadsList();
       document.getElementById('messages').innerHTML = '';
       addWelcomeMessage();
-      document.getElementById('memory-panel').style.display = 'none';
     }
   } catch (err) {
     showError('Ошибка удаления диалога: ' + err.message);
@@ -449,13 +453,13 @@ async function sendMessage() {
   const input = document.getElementById('question-input');
   const question = input.value.trim();
   if (!question) return;
-
-  addMessage('user', question);
   input.value = '';
 
   if (!currentThreadId) {
     await createThread();
   }
+
+  addMessage('user', question);
 
   const sendBtn = document.getElementById('btn-send');
   sendBtn.disabled = true;
@@ -498,7 +502,7 @@ function togglePipelineConfig() {
   const btn = document.getElementById('btn-pipeline-toggle');
   pipelineConfigOpen = !pipelineConfigOpen;
   panel.classList.toggle('open', pipelineConfigOpen);
-  btn.textContent = pipelineConfigOpen ? 'Pipeline Config ▴' : 'Pipeline Config ▾';
+  btn.textContent = pipelineConfigOpen ? 'Pipeline ▴' : 'Pipeline ▾';
 }
 
 function toggleAdvancedSettings() {
@@ -506,6 +510,13 @@ function toggleAdvancedSettings() {
   const btn = document.getElementById('btn-advanced-toggle');
   const isOpen = advanced.classList.toggle('open');
   btn.textContent = isOpen ? '▲ Скрыть расширенные' : '▼ Расширенные';
+}
+
+function toggleMemorySection() {
+  const body = document.getElementById('memory-section-body');
+  const arrow = document.getElementById('memory-section-arrow');
+  const isOpen = body.classList.toggle('open');
+  arrow.classList.toggle('open', isOpen);
 }
 
 async function openCompareModal() {
@@ -616,6 +627,8 @@ document.getElementById('cfg-threshold').addEventListener('input', function() {
 document.getElementById('compare-modal').addEventListener('click', function(e) {
   if (e.target === this) closeCompareModal();
 });
+
+document.getElementById('memory-section-toggle').addEventListener('click', toggleMemorySection);
 
 document.getElementById('btn-new-thread').addEventListener('click', async () => {
   await createThread();

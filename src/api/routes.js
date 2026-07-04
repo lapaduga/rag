@@ -72,7 +72,9 @@ router.get('/chunks', (req, res) => {
   const parsed = chunks.map(c => ({
     ...c,
     metadata: JSON.parse(c.metadata),
-    embedding: c.embedding ? JSON.parse(c.embedding) : null,
+    embedding: c.embedding instanceof Buffer
+      ? Array.from(new Float32Array(c.embedding.buffer, c.embedding.byteOffset, c.embedding.byteLength / 4))
+      : (c.embedding ? JSON.parse(c.embedding) : null),
   }));
   res.json({ success: true, data: parsed });
 });
