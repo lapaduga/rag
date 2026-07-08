@@ -71,12 +71,13 @@ export class RagPipeline {
     chunks = [...topKChunks, ...contentMatchChunks];
     stages.push({ stage: 'topK', count: chunks.length, time_ms: Date.now() - t4 });
 
-    const confidenceScore = topKChunks.length > 0
-      ? topKChunks.reduce((sum, c) => {
+    const top5 = topKChunks.slice(0, 5);
+    const confidenceScore = top5.length > 0
+      ? top5.reduce((sum, c) => {
           const kwBoost = 0.2 * ((c._keywordScore?.matched || 0));
           const raw = c.combinedScore ?? ((c.similarity || 0) + kwBoost);
           return sum + Math.min(1.0, Math.max(0, raw));
-        }, 0) / topKChunks.length
+        }, 0) / top5.length
       : 0;
 
     const minConfidence = options.minConfidence ?? this.config.minConfidence ?? 0.25;
