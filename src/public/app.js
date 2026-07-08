@@ -308,4 +308,19 @@ document.getElementById('btn-stop').addEventListener('click', async () => {
 document.getElementById('btn-compare').addEventListener('click', compareStrategies);
 document.getElementById('btn-clear').addEventListener('click', clearIndex);
 
+async function pollSystemStats() {
+  try {
+    const res = await fetch(`${API}/system-stats`);
+    const json = await res.json();
+    if (!json.success) return;
+    const d = json.data;
+    const ramEl = document.getElementById('stat-ram');
+    const cpuEl = document.getElementById('stat-cpu');
+    if (ramEl) ramEl.textContent = `RAM: ${d.ram.percent}% (${(d.ram.used / 1073741824).toFixed(1)}/${(d.ram.total / 1073741824).toFixed(1)} GB)`;
+    if (cpuEl) cpuEl.textContent = `CPU: ${d.cpu.usagePercent}%`;
+  } catch {}
+}
+
 loadDocuments();
+pollSystemStats();
+setInterval(pollSystemStats, 2000);

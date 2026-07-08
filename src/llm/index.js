@@ -22,10 +22,20 @@ const NO_RAG_KEYWORDS = [
 ];
 
 export class LlmClient {
-  constructor() {
-    this.apiKey = config.chat.apiKey;
-    this.model = config.chat.model;
-    this.baseUrl = config.chat.baseUrl;
+  constructor(provider) {
+    this.provider = provider || config.provider || 'deepseek';
+
+    if (this.provider === 'local') {
+      this.apiKey = '';
+      this.model = config.localLlm.model;
+      this.baseUrl = config.localLlm.baseUrl;
+      this.numThreads = config.localLlm.numThreads;
+      this.numGpu = config.localLlm.numGpu;
+    } else {
+      this.apiKey = config.chat.apiKey;
+      this.model = config.chat.model;
+      this.baseUrl = config.chat.baseUrl;
+    }
   }
 
   async chat(messages, options = {}) {
@@ -33,18 +43,29 @@ export class LlmClient {
     const maxTokens = options.maxTokens || 2000;
     const start = Date.now();
 
+    const headers = { 'Content-Type': 'application/json' };
+    if (this.apiKey) {
+      headers['Authorization'] = `Bearer ${this.apiKey}`;
+    }
+
+    const body = {
+      model: this.model,
+      messages,
+      temperature,
+      max_tokens: maxTokens,
+    };
+
+    if (this.provider === 'local') {
+      body.options = {
+        num_thread: this.numThreads,
+        num_gpu: this.numGpu,
+      };
+    }
+
     const res = await fetch(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`
-      },
-      body: JSON.stringify({
-        model: this.model,
-        messages,
-        temperature,
-        max_tokens: maxTokens,
-      })
+      headers,
+      body: JSON.stringify(body),
     });
 
     const data = await res.json();
@@ -59,6 +80,18 @@ export class LlmClient {
       usage: data.usage || {},
       timing_ms: timing,
     };
+  }
+
+  async checkHealth() {
+    if (this.provider === 'local') {
+      try {
+        const res = await fetch('http://localhost:11434/api/tags');
+        return { available: res.ok };
+      } catch {
+        return { available: false, error: 'Ollama не запущен. Запустите: ollama serve' };
+      }
+    }
+    return { available: true };
   }
 
   _hasCyrillic(text) {

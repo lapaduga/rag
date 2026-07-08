@@ -21,7 +21,15 @@
           <button class="mode-btn active" data-mode="rag">RAG</button>
           <button class="mode-btn" data-mode="no-rag">No RAG</button>
         </div>
+        <div class="provider-selector">
+          <button class="provider-btn active" data-provider="deepseek">DeepSeek</button>
+          <button class="provider-btn" data-provider="local">Local <span class="provider-status" id="ollama-status" title="Проверка Ollama...">◌</span></button>
+        </div>
         <button class="btn btn-secondary btn-sm pipeline-toggle" id="btn-pipeline-toggle" onclick="togglePipelineConfig()">Pipeline ▾</button>
+        <div class="sys-stats" id="sys-stats" title="Загрузка системы">
+          <span class="sys-stat" id="stat-ram">RAM: --%</span>
+          <span class="sys-stat" id="stat-cpu">CPU: --%</span>
+        </div>
       </div>
     </header>
 

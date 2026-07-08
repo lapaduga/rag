@@ -12,16 +12,23 @@ import { MemoryManager } from '../memory/index.js';
 import { ContextWindow } from '../context-window/index.js';
 import { validateIndexRequest } from './middleware.js';
 import { config } from '../config.js';
+import os from 'os';
 
 const router = Router();
 const indexer = new Indexer();
 const embedder = new Embedder();
 const retriever = new Retriever(embedder);
 const augmenter = new Augmenter();
-const llmClient = new LlmClient();
+
+function createLlmClient(provider) {
+  return new LlmClient(provider);
+}
+
+let llmClient = createLlmClient(config.provider);
+
 const reranker = new Reranker({ model: config.reranker.model });
 const rewriter = new QueryRewriter(llmClient);
-const ragPipeline = new RagPipeline({
+let ragPipeline = new RagPipeline({
   retriever,
   reranker,
   rewriter,
@@ -30,11 +37,43 @@ const ragPipeline = new RagPipeline({
   config: config.pipeline || {},
 });
 
-const memoryManager = new MemoryManager(llmClient);
+let memoryManager = new MemoryManager(llmClient);
 const contextWindow = new ContextWindow({ maxTokens: 6000, maxMessages: 20 });
+
+function rebuildPipeline(provider) {
+  llmClient = createLlmClient(provider);
+  rewriter.llmClient = llmClient;
+  ragPipeline = new RagPipeline({
+    retriever,
+    reranker,
+    rewriter,
+    augmenter,
+    llm: llmClient,
+    config: config.pipeline || {},
+  });
+  memoryManager = new MemoryManager(llmClient);
+}
 
 router.get('/status', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });
+});
+
+router.get('/config', (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      provider: config.provider,
+      providers: ['deepseek', 'local'],
+      localModel: config.localLlm.model,
+      deepseekModel: config.chat.model,
+    },
+  });
+});
+
+router.get('/ollama/status', async (req, res) => {
+  const client = createLlmClient('local');
+  const status = await client.checkHealth();
+  res.json({ success: true, data: status });
 });
 
 router.post('/index', validateIndexRequest, async (req, res, next) => {
@@ -79,9 +118,54 @@ router.get('/chunks', (req, res) => {
   res.json({ success: true, data: parsed });
 });
 
-router.get('/stats', (req, res) => {
-  const stats = db.getStats();
-  res.json({ success: true, data: stats });
+let prevCpuTimes = null;
+
+function getCpuUsage() {
+  const cpus = os.cpus();
+  const totalCores = cpus.length;
+  let totalIdle = 0;
+  let totalTick = 0;
+  for (const cpu of cpus) {
+    for (const type in cpu.times) {
+      totalTick += cpu.times[type];
+    }
+    totalIdle += cpu.times.idle;
+  }
+  const snapshot = { idle: totalIdle, tick: totalTick };
+  if (!prevCpuTimes) {
+    prevCpuTimes = snapshot;
+    return { usagePercent: 0, cores: totalCores };
+  }
+  const idleDiff = snapshot.idle - prevCpuTimes.idle;
+  const tickDiff = snapshot.tick - prevCpuTimes.tick;
+  prevCpuTimes = snapshot;
+  const usage = tickDiff > 0 ? 100 - (idleDiff / tickDiff) * 100 : 0;
+  return { usagePercent: Math.round(usage * 10) / 10, cores: totalCores };
+}
+
+router.get('/system-stats', (req, res) => {
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const usedMem = totalMem - freeMem;
+  const procMem = process.memoryUsage();
+  const cpu = getCpuUsage();
+  res.json({
+    success: true,
+    data: {
+      ram: {
+        total: totalMem,
+        used: usedMem,
+        free: freeMem,
+        percent: totalMem > 0 ? Math.round((usedMem / totalMem) * 100) : 0,
+      },
+      cpu,
+      process: {
+        memory: procMem.rss,
+        heapUsed: procMem.heapUsed,
+        heapTotal: procMem.heapTotal,
+      },
+    },
+  });
 });
 
 router.delete('/index', (req, res) => {
@@ -105,9 +189,14 @@ router.post('/index/compare', async (req, res, next) => {
 
 router.post('/query', async (req, res, next) => {
   try {
-    const { question, mode = 'auto', pipeline: pipelineOpts, thread_id } = req.body;
+    const { question, mode = 'auto', pipeline: pipelineOpts, thread_id, provider } = req.body;
     if (!question) {
       return res.status(400).json({ error: true, message: 'Поле "question" обязательно' });
+    }
+
+    const activeProvider = provider || config.provider || 'deepseek';
+    if (activeProvider !== llmClient.provider) {
+      rebuildPipeline(activeProvider);
     }
 
     let history = [];
@@ -231,6 +320,7 @@ router.post('/query', async (req, res, next) => {
       data: {
         answer: result.answer,
         mode: result.mode,
+        provider: activeProvider,
         searchQuery: result.searchQuery,
         needsTranslation: result.needsTranslation,
         sources: result.sources,

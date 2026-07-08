@@ -1,5 +1,6 @@
 const API = '/api';
 let currentMode = 'rag';
+let currentProvider = 'deepseek';
 let pipelineConfigOpen = false;
 let currentThreadId = null;
 let threads = [];
@@ -38,7 +39,7 @@ function getPipelineConfig() {
   };
 }
 
-function addMessage(role, text, mode, sources, pipeline, confidenceScore, hasEnoughContext, citations, isDontKnow) {
+function addMessage(role, text, mode, sources, pipeline, confidenceScore, hasEnoughContext, citations, isDontKnow, provider, timing) {
   const container = document.getElementById('messages');
   const div = document.createElement('div');
   div.className = `message ${role}`;
@@ -47,6 +48,17 @@ function addMessage(role, text, mode, sources, pipeline, confidenceScore, hasEno
   if (mode) {
     const modeLabel = { auto: 'Auto', rag: 'RAG', 'no-rag': 'No RAG' }[mode] || mode;
     badgeHtml = `<div class="message-badge mode-${mode}">${modeLabel}</div>`;
+  }
+  if (provider && role === 'assistant') {
+    const provLabel = provider === 'local' ? 'Local' : 'DeepSeek';
+    const provClass = provider === 'local' ? 'provider-local' : 'provider-deepseek';
+    badgeHtml += `<div class="message-badge ${provClass}">${provLabel}</div>`;
+  }
+  if (timing && role === 'assistant') {
+    const llmStage = pipeline?.stages?.find(s => s.stage === 'llm');
+    const llmMs = llmStage?.time_ms || timing.llm || timing.total || 0;
+    const label = llmMs < 1000 ? `${llmMs}ms` : `${(llmMs / 1000).toFixed(1)}s`;
+    badgeHtml += `<div class="message-badge badge-timing">${label}</div>`;
   }
 
   let translateHtml = '';
@@ -474,6 +486,7 @@ async function sendMessage() {
     const body = {
       question,
       mode: currentMode,
+      provider: currentProvider,
       pipeline: hasPipeline ? pipeline : undefined,
       thread_id: currentThreadId,
     };
@@ -484,7 +497,8 @@ async function sendMessage() {
     });
     removeTyping();
     addMessage('assistant', res.data.answer, res.data.mode, res.data.sources, res.data.pipeline,
-      res.data.confidenceScore, res.data.hasEnoughContext, res.data.citations, res.data.isDontKnow);
+      res.data.confidenceScore, res.data.hasEnoughContext, res.data.citations, res.data.isDontKnow,
+      res.data.provider, res.data.timing);
 
     await loadThreads();
     await loadThreadMemory(currentThreadId);
@@ -527,6 +541,50 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
   });
 });
 
+document.querySelectorAll('.provider-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.provider-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentProvider = btn.dataset.provider;
+  });
+});
+
+async function checkOllamaStatus() {
+  const statusEl = document.getElementById('ollama-status');
+  try {
+    const res = await fetch(`${API}/ollama/status`);
+    const data = await res.json();
+    if (data.success && data.data.available) {
+      statusEl.textContent = '●';
+      statusEl.className = 'provider-status online';
+    } else {
+      statusEl.textContent = '●';
+      statusEl.className = 'provider-status offline';
+    }
+  } catch {
+    statusEl.textContent = '●';
+    statusEl.className = 'provider-status offline';
+  }
+}
+
+checkOllamaStatus();
+
+async function pollSystemStats() {
+  try {
+    const res = await fetch(`${API}/system-stats`);
+    const json = await res.json();
+    if (!json.success) return;
+    const d = json.data;
+    const ramEl = document.getElementById('stat-ram');
+    const cpuEl = document.getElementById('stat-cpu');
+    if (ramEl) ramEl.textContent = `RAM: ${d.ram.percent}% (${(d.ram.used / 1073741824).toFixed(1)}/${(d.ram.total / 1073741824).toFixed(1)} GB)`;
+    if (cpuEl) cpuEl.textContent = `CPU: ${d.cpu.usagePercent}%`;
+  } catch {}
+}
+
+pollSystemStats();
+setInterval(pollSystemStats, 2000);
+
 document.getElementById('btn-send').addEventListener('click', sendMessage);
 document.getElementById('question-input').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) {
@@ -554,4 +612,19 @@ document.getElementById('btn-save-memory').addEventListener('click', saveMemory)
 document.getElementById('btn-clear-memory').addEventListener('click', clearMemory);
 document.getElementById('btn-clear-chat').addEventListener('click', clearChat);
 
+async function loadConfig() {
+  try {
+    const res = await apiFetch('/config');
+    if (res.success && res.data.provider) {
+      currentProvider = res.data.provider;
+      document.querySelectorAll('.provider-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.provider === currentProvider);
+      });
+    }
+  } catch (e) {
+    console.warn('Failed to load config:', e);
+  }
+}
+
+loadConfig();
 loadThreads();

@@ -67,10 +67,22 @@ try {
   db.migrate();
   console.log(`[DB] SQLite ready at ${config.db.path}`);
 
-  app.listen(config.port, config.host, () => {
+  app.listen(config.port, config.host, async () => {
     console.log(`[SERVER] RAG Indexer running at http://${config.host}:${config.port}`);
     console.log(`[CONFIG] Documents path: ${config.documents.path}`);
     console.log(`[CONFIG] Embedding model: ${config.embeddings.model}`);
+    console.log(`[CONFIG] LLM provider: ${config.provider} (local model: ${config.localLlm.model}, cloud model: ${config.chat.model})`);
+
+    if (config.provider === 'local') {
+      try {
+        const res = await fetch('http://localhost:11434/api/tags');
+        const ok = await res.json();
+        console.log(`[OLLAMA] ${ok ? 'Connected' : 'Not available'} — ${config.localLlm.model}`);
+      } catch {
+        console.log('[OLLAMA] Not running. Start with: ollama serve');
+        console.log('[OLLAMA] Then pull model: ollama pull ' + config.localLlm.model);
+      }
+    }
   });
 } catch (err) {
   console.error('[FATAL] Failed to start:', err);

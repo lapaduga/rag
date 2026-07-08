@@ -36,10 +36,19 @@ export const config = {
     fixedCharOverlap: parseInt(process.env.CHUNK_OVERLAP, 10) || 100,
   },
 
+  provider: process.env.LLM_PROVIDER || 'deepseek',
+
   chat: {
     apiKey: process.env.CHAT_API_KEY || process.env.EMBEDDING_API_KEY || '',
     model: process.env.CHAT_MODEL || 'deepseek-chat',
     baseUrl: process.env.CHAT_BASE_URL || 'https://api.deepseek.com',
+  },
+
+  localLlm: {
+    model: process.env.LOCAL_MODEL || 'qwen2.5:3b',
+    baseUrl: process.env.LOCAL_BASE_URL || 'http://localhost:11434/v1',
+    numThreads: parseInt(process.env.LOCAL_NUM_THREADS, 10) || 4,
+    numGpu: parseInt(process.env.LOCAL_NUM_GPU, 10) || 0,
   },
 
   reranker: {

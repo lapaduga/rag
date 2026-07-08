@@ -60,6 +60,67 @@
   color: var(--text-primary);
 }
 
+/* Provider selector */
+.provider-selector {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  padding: 2px;
+}
+
+.provider-btn {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 3px;
+  font-size: 11px;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.provider-btn.active[data-provider="deepseek"] {
+  background: var(--accent-blue);
+  color: #fff;
+}
+
+.provider-btn.active[data-provider="local"] {
+  background: var(--accent-green);
+  color: #000;
+}
+
+.provider-btn:hover:not(.active) {
+  color: var(--text-primary);
+}
+
+.provider-status {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.provider-status.online {
+  color: var(--accent-green);
+}
+
+.provider-status.offline {
+  color: var(--accent-red);
+}
+
+.message-badge.provider-local {
+  background: var(--accent-green);
+  color: #000;
+}
+
+.message-badge.provider-deepseek {
+  background: var(--accent-blue);
+  color: #fff;
+}
+
 .chat-layout {
   display: flex;
   flex: 1;
@@ -146,6 +207,18 @@
   margin-bottom: 6px;
   text-transform: uppercase;
   letter-spacing: 0.3px;
+}
+
+.message-badge + .message-badge {
+  margin-left: 4px;
+}
+
+.badge-timing {
+  background: var(--bg-primary) !important;
+  color: var(--text-secondary) !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-family: var(--font-mono);
 }
 
 .mode-auto {
@@ -631,4 +704,28 @@
 @keyframes progress-indeterminate {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(400%); }
+}
+
+.sys-stats {
+  display: flex;
+  gap: 6px;
+  padding: 2px 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.sys-stat {
+  color: var(--text-secondary);
+}
+
+.sys-stat#stat-ram {
+  color: var(--accent-yellow);
+}
+
+.sys-stat#stat-cpu {
+  color: var(--accent-green);
 }
