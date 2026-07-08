@@ -231,10 +231,9 @@ export class Retriever {
     });
 
     const topKChunks = allScored.slice(0, topK);
-    const ckLimit = Math.max(50, topK);
     const contentMatchChunks = allScored.filter(c =>
       (c._contentKwMatches || 0) > 0 && !topKChunks.some(t => t.chunk_id === c.chunk_id)
-    ).slice(0, ckLimit);
+    ).slice(0, topK);
     return [...topKChunks, ...contentMatchChunks];
   }
 

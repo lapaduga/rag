@@ -280,10 +280,10 @@ class Database {
 
   // === Messages ===
 
-  saveMessage({ thread_id, role, content, sources, citations, confidence_score, has_enough_context, is_dont_know, pipeline }) {
+  saveMessage({ thread_id, role, content, sources, citations, confidence_score, has_enough_context, is_dont_know, pipeline, provider }) {
     this.db.prepare(`
-      INSERT INTO messages (thread_id, role, content, sources, citations, confidence_score, has_enough_context, is_dont_know, pipeline_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO messages (thread_id, role, content, sources, citations, confidence_score, has_enough_context, is_dont_know, pipeline_json, provider)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       thread_id,
       role,
@@ -293,7 +293,8 @@ class Database {
       confidence_score != null ? confidence_score : null,
       has_enough_context != null ? (has_enough_context ? 1 : 0) : 1,
       is_dont_know ? 1 : 0,
-      pipeline || null
+      pipeline || null,
+      provider || null
     );
     this.db.prepare('UPDATE threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(thread_id);
   }

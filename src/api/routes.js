@@ -267,6 +267,7 @@ router.post('/query', async (req, res, next) => {
         thread_id,
         role: 'user',
         content: question,
+        provider: activeProvider,
       });
       db.saveMessage({
         thread_id,
@@ -278,6 +279,7 @@ router.post('/query', async (req, res, next) => {
         has_enough_context: result.hasEnoughContext,
         is_dont_know: result.isDontKnow || false,
         pipeline: result.pipeline ? JSON.stringify(result.pipeline) : null,
+        provider: activeProvider,
       });
 
       if (config.pipeline?.memoryExtractionEnabled && memoryManager) {

@@ -29,6 +29,24 @@ function formatTiming(ms) {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+function playNotification() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, t);
+    osc.frequency.linearRampToValueAtTime(1320, t + 0.12);
+    gain.gain.setValueAtTime(0.25, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.35);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.35);
+  } catch {}
+}
+
 function getPipelineConfig() {
   return {
     queryRewrite: $('cfg-rewrite').checked,
@@ -302,9 +320,10 @@ async function loadThreadMessages(threadId) {
       addWelcomeMessage();
     } else {
       for (const msg of messages) {
-        addMessage(msg.role, msg.content, msg.role === 'assistant' ? 'rag' : null,
+        const mode = msg.role === 'assistant' ? (msg.mode || 'rag') : null;
+        addMessage(msg.role, msg.content, mode,
           msg.sources, msg.pipeline, msg.confidence_score, msg.has_enough_context,
-          msg.citations, msg.is_dont_know);
+          msg.citations, msg.is_dont_know, msg.provider || currentProvider);
       }
     }
     container.scrollTop = container.scrollHeight;
@@ -499,6 +518,7 @@ async function sendMessage() {
     addMessage('assistant', res.data.answer, res.data.mode, res.data.sources, res.data.pipeline,
       res.data.confidenceScore, res.data.hasEnoughContext, res.data.citations, res.data.isDontKnow,
       res.data.provider, res.data.timing);
+    playNotification();
 
     await loadThreads();
     await loadThreadMemory(currentThreadId);
@@ -517,13 +537,6 @@ function togglePipelineConfig() {
   pipelineConfigOpen = !pipelineConfigOpen;
   panel.classList.toggle('open', pipelineConfigOpen);
   btn.textContent = pipelineConfigOpen ? 'Pipeline ▴' : 'Pipeline ▾';
-}
-
-function toggleAdvancedSettings() {
-  const advanced = document.getElementById('pipeline-advanced');
-  const btn = document.getElementById('btn-advanced-toggle');
-  const isOpen = advanced.classList.toggle('open');
-  btn.textContent = isOpen ? '▲ Скрыть расширенные' : '▼ Расширенные';
 }
 
 function toggleMemorySection() {
@@ -626,5 +639,7 @@ async function loadConfig() {
   }
 }
 
-loadConfig();
-loadThreads();
+(async () => {
+  await loadConfig();
+  loadThreads();
+})();

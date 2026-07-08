@@ -634,36 +634,6 @@
   font-weight: 600;
 }
 
-.pipeline-advanced-toggle {
-  font-size: 11px;
-  color: var(--text-link);
-  cursor: pointer;
-  user-select: none;
-  white-space: nowrap;
-}
-
-.pipeline-advanced-toggle:hover {
-  text-decoration: underline;
-}
-
-.pipeline-advanced {
-  display: none;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border-color);
-}
-
-.pipeline-advanced.open {
-  display: block;
-}
-
-.pipeline-advanced-body {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -708,7 +678,7 @@
 
 .sys-stats {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   padding: 2px 8px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
@@ -716,10 +686,14 @@
   font-family: var(--font-mono);
   font-size: 10px;
   white-space: nowrap;
+  min-width: 200px;
+  justify-content: flex-end;
 }
 
 .sys-stat {
   color: var(--text-secondary);
+  min-width: 90px;
+  text-align: right;
 }
 
 .sys-stat#stat-ram {

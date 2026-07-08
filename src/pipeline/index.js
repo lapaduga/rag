@@ -67,7 +67,7 @@ export class RagPipeline {
     const contentMatchChunks = chunks
       .filter(c => (c._contentKwMatches || 0) > 0 && !topKChunks.find(t => t.chunk_id === c.chunk_id))
       .sort((a, b) => (b._contentKwMatches || 0) - (a._contentKwMatches || 0))
-      .slice(0, Math.max(topKAfter, 50));
+      .slice(0, topKAfter);
     chunks = [...topKChunks, ...contentMatchChunks];
     stages.push({ stage: 'topK', count: chunks.length, time_ms: Date.now() - t4 });
 
