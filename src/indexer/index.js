@@ -24,7 +24,7 @@ export class Indexer {
     this._aborted = true;
   }
 
-  async runIndexing(rootPath, strategy = 'fixed', maxFiles) {
+  async runIndexing(rootPath, strategy = 'semantic', maxFiles) {
     if (this.status.running) {
       throw new Error('Индексация уже выполняется');
     }

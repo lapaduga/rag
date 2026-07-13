@@ -80,7 +80,7 @@ router.get('/ollama/status', async (req, res) => {
 router.post('/index', validateIndexRequest, async (req, res, next) => {
   try {
     const { path: docPath, strategy, maxFiles } = req.body;
-    const result = await indexer.runIndexing(docPath, strategy || 'fixed', maxFiles);
+    const result = await indexer.runIndexing(docPath, strategy || 'semantic', maxFiles);
     retriever.invalidateCache();
     res.json({ success: true, data: result });
   } catch (err) {
@@ -431,7 +431,7 @@ const HELP_TEXT = {
 • GET /api/ollama/status — статус Ollama
 
 ИНДЕКСАЦИЯ:
-• POST /api/index — запуск (body: {path, strategy, maxFiles})
+• POST /api/index — запуск (body: {path, strategy: 'semantic'|'fixed', maxFiles}) — по умолчанию semantic
 • GET /api/index/status — статус индексации
 • POST /api/index/cancel — отмена
 • DELETE /api/index — очистка индекса
