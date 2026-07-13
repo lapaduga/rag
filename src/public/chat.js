@@ -64,7 +64,7 @@ function addMessage(role, text, mode, sources, pipeline, confidenceScore, hasEno
 
   let badgeHtml = '';
   if (mode) {
-    const modeLabel = { auto: 'Auto', rag: 'RAG', 'no-rag': 'No RAG' }[mode] || mode;
+    const modeLabel = { auto: 'Auto', rag: 'RAG', 'no-rag': 'No RAG', help: 'Help', mcp: 'MCP' }[mode] || mode;
     badgeHtml = `<div class="message-badge mode-${mode}">${modeLabel}</div>`;
   }
   if (provider && role === 'assistant') {
@@ -337,7 +337,7 @@ function addWelcomeMessage() {
   const container = document.getElementById('messages');
   const div = document.createElement('div');
   div.className = 'message assistant';
-  div.innerHTML = `<div class="message-content"><p>Привет! Я — ассистент по кодовой базе. Задай вопрос о проекте.</p></div>`;
+  div.innerHTML = `<div class="message-content"><p>Привет! Я — ассистент по кодовой базе. Задай вопрос о проекте.</p><p class="help-hint"><code>/help</code> — справка · <code>/git</code> — ветка · <code>/diff</code> — изменения · <code>/log</code> — коммиты · <code>/files</code> — файлы</p></div>`;
   container.appendChild(div);
 }
 

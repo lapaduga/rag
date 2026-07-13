@@ -16,7 +16,7 @@ export const config = {
   },
 
   documents: {
-    path: process.env.DOCUMENTS_PATH || 'C:\\defined\\front',
+    path: process.env.DOCUMENTS_PATH || '.',
     allowedExtensions: ['.md', '.txt', '.js', '.ts', '.jsx', '.tsx', '.css', '.html', '.json'],
     ignoreDirs: ['node_modules', '.git', 'dist', 'build', 'coverage', '.nyc_output', '__pycache__'],
     maxFileSizeBytes: 10 * 1024 * 1024,

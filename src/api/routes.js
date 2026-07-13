@@ -9,7 +9,7 @@ import { Reranker } from '../reranker/index.js';
 import { QueryRewriter } from '../query-rewrite/index.js';
 import { RagPipeline } from '../pipeline/index.js';
 import { MemoryManager } from '../memory/index.js';
-import { ContextWindow } from '../context-window/index.js';
+import { McpServer } from '../mcp/index.js';
 import { validateIndexRequest } from './middleware.js';
 import { config } from '../config.js';
 import os from 'os';
@@ -38,7 +38,7 @@ let ragPipeline = new RagPipeline({
 });
 
 let memoryManager = new MemoryManager(llmClient);
-const contextWindow = new ContextWindow({ maxTokens: 6000, maxMessages: 20 });
+const mcpServer = new McpServer();
 
 function rebuildPipeline(provider) {
   llmClient = createLlmClient(provider);
@@ -66,6 +66,7 @@ router.get('/config', (req, res) => {
       providers: ['deepseek', 'local'],
       localModel: config.localLlm.model,
       deepseekModel: config.chat.model,
+      documentsPath: config.documents.path,
     },
   });
 });
@@ -194,6 +195,50 @@ router.post('/query', async (req, res, next) => {
       return res.status(400).json({ error: true, message: 'Поле "question" обязательно' });
     }
 
+    if (question.trim().startsWith('/help')) {
+      const result = handleHelpCommand(question);
+      if (thread_id) {
+        db.saveMessage({ thread_id, role: 'user', content: question, provider: provider || config.provider });
+        db.saveMessage({ thread_id, role: 'assistant', content: result.answer, provider: provider || config.provider });
+      }
+      return res.json({ success: true, data: { ...result, thread_id, provider: provider || config.provider } });
+    }
+
+    const MCP_COMMANDS = {
+      '/git': 'get_git_branch',
+      '/diff': 'get_git_diff',
+      '/files': 'list_project_files',
+      '/log': 'get_git_log',
+    };
+    const cmd = question.trim().toLowerCase().split(/\s+/)[0];
+    if (MCP_COMMANDS[cmd]) {
+      const mcpResult = await mcpServer.callTool(MCP_COMMANDS[cmd]);
+      const answer = mcpResult.error
+        ? `Ошибка: ${mcpResult.error}`
+        : formatMcpResult(cmd, mcpResult);
+      if (thread_id) {
+        db.saveMessage({ thread_id, role: 'user', content: question, provider: provider || config.provider });
+        db.saveMessage({ thread_id, role: 'assistant', content: answer, provider: provider || config.provider });
+      }
+      return res.json({
+        success: true,
+        data: {
+          answer,
+          mode: 'mcp',
+          sources: [],
+          citations: [],
+          confidenceScore: 1,
+          hasEnoughContext: true,
+          isDontKnow: false,
+          timing: { total: 0 },
+          usage: {},
+          pipeline: null,
+          thread_id,
+          provider: provider || config.provider,
+        },
+      });
+    }
+
     const activeProvider = provider || config.provider || 'deepseek';
     if (activeProvider !== llmClient.provider) {
       rebuildPipeline(activeProvider);
@@ -259,6 +304,7 @@ router.post('/query', async (req, res, next) => {
         timing: pipelineResult.timing,
         usage: pipelineResult.usage,
         pipeline: pipelineResult.pipeline,
+        toolCalls: pipelineResult.toolCalls || [],
       };
     }
 
@@ -333,9 +379,206 @@ router.post('/query', async (req, res, next) => {
         timing: result.timing,
         usage: result.usage,
         pipeline: result.pipeline,
+        toolCalls: result.toolCalls || [],
         thread_id,
       }
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// === Help ===
+
+const HELP_TEXT = {
+  general: `Я — ассистент разработчика для проекта RAG Indexer. Вот что я умею:
+
+МОДУЛИ ПРОЕКТА:
+• Indexer — индексация файлов (fixed/semantic чанкинг)
+• Retriever — семантический поиск с keyword-boost
+• Reranker — переупорядочивание через cross-encoder
+• Pipeline — оркестрация: translate → rewrite → retrieve → rerank → LLM
+• MCP Server — инструменты разработчика (git, файлы)
+
+ДОСТУПНЫЕ КОМАНДЫ:
+• /help — эта справка
+• /help api — справка по API
+• /help architecture — архитектура проекта
+• /help modules — описание модулей
+• /help database — схема БД
+
+ИНСТРУМЕНТЫ MCP:
+• /git — текущая git-ветка и статус
+• /diff — последние изменения (git diff --stat)
+• /log — последние 10 коммитов
+• /files — список файлов проекта
+
+КАК ЗАДАВАТЬ ВОПРОСЫ:
+Просто напишите вопрос о проекте. Например:
+• "Как работает retriever?"
+• "Что делает augmenter?"
+• "Какие таблицы есть в БД?"
+• "Как запустить индексацию?"
+
+СИСТЕМА: Node.js + Express + SQLite + Xenova/all-MiniLM-L6-v2 + DeepSeek/Ollama`,
+
+  api: `API ENDPOINTS (базовый URL: /api):
+
+СИСТЕМНЫЕ:
+• GET /api/status — статус сервера
+• GET /api/config — конфигурация
+• GET /api/system-stats — RAM, CPU
+• GET /api/ollama/status — статус Ollama
+
+ИНДЕКСАЦИЯ:
+• POST /api/index — запуск (body: {path, strategy, maxFiles})
+• GET /api/index/status — статус индексации
+• POST /api/index/cancel — отмена
+• DELETE /api/index — очистка индекса
+
+ЗАПРОСЫ:
+• POST /api/query — вопрос (body: {question, mode, provider, thread_id})
+
+ДИАЛОГИ:
+• POST /api/threads — создать диалог
+• GET /api/threads — список диалогов
+• GET /api/threads/:id/messages — сообщения
+
+MCP:
+• POST /api/mcp/call — вызов инструмента (body: {tool})`,
+
+  architecture: `АРХИТЕКТУРА RAG INDEXER:
+
+ПОТОК ДАННЫХ:
+User → QueryRewrite → Retrieve → Rerank → Filter → TopK → LLM → CitationParse → Answer
+
+ЭТАПЫ PIPELINE:
+1. Translate — запрос RU→EN для эмбеддингов
+2. Rewrite — LLM реформулирует запрос
+3. Retrieval — cosine similarity + keyword-boost
+4. Rerank — cross-encoder (ms-marco-MiniLM)
+5. Filter — по порогу similarity
+6. Top-K — отбор лучших чанков
+7. LLM — генерация ответа с контекстом
+8. Citation Parse — валидация цитат
+
+ФАЙЛЫ:
+• src/indexer/ — индексация, чанкинг, эмбеддинги
+• src/retriever/ — поиск
+• src/reranker/ — переупорядочивание
+• src/pipeline/ — оркестрация
+• src/llm/ — клиент LLM
+• src/mcp/ — инструменты разработчика
+• src/api/ — HTTP роуты
+• src/storage/ — SQLite + миграции`,
+
+  modules: `МОДУЛИ ПРОЕКТА:
+
+INDEXER (src/indexer/):
+• index.js — оркестрация индексации файлов
+• chunker.js — fixed и semantic чанкинг
+• embedder.js — Xenova/all-MiniLM-L6-v2 (384-dim)
+• metadata.js — извлечение метаданных из файлов
+
+RETRIEVER (src/retriever/):
+• Кэширует все чанки в памяти
+• Cosine similarity + keyword-boost
+• IDF-взвешивание для контентных ключевых слов
+• Транслитерация RU→EN для поиска
+
+RERANKER (src/reranker/):
+• Cross-encoder ms-marco-MiniLM-L-6-v2
+• Нормализация скоров, комбинирование 0.4/0.6
+
+PIPELINE (src/pipeline/):
+• Оркестрация всех этапов
+• Тайминги по каждому stage
+• Low-confidence guard
+
+LLM (src/llm/):
+• DeepSeek API (облако)
+• Ollama (локально, qwen2.5:3b)
+• Auto-detection режима RAG/no-RAG`,
+
+  database: `СХЕМА БАЗЫ ДАННЫХ (SQLite):
+
+DOCUMENTS — проиндексированные файлы
+• id, path (UNIQUE), filename, extension, content, size_bytes, indexed_at
+
+CHUNKS — чанки для поиска
+• id, document_id (FK), chunk_id (UUID), content, embedding (BLOB), metadata (JSON), strategy, chunk_index
+
+QUERIES — история запросов
+• id, question, mode, answer, sources, latency_ms, pipeline_json, citations, confidence_score
+
+THREADS — диалоги
+• id, title, task_goal, constraints, created_at, updated_at
+
+MESSAGES — сообщения
+• id, thread_id (FK), role, content, sources, citations, confidence_score, provider
+
+TASK_MEMORY — память задачи
+• id, thread_id (FK), key, value, type (goal/constraint/term/clarification)
+`,
+};
+
+function formatMcpResult(cmd, data) {
+  if (cmd === '/git') {
+    if (data.error) return `Ошибка: ${data.error}`;
+    return `Текущая ветка: ${data.branch}\nИзменённых файлов: ${data.modifiedFiles}${data.isDirty ? ' (есть несохранённые изменения)' : ''}`;
+  }
+  if (cmd === '/diff') {
+    if (data.error) return `Ошибка: ${data.error}`;
+    if (!data.diff || data.diff === 'Нет изменений') return 'Нет изменений';
+    return `Изменено файлов: ${data.files}\n\n${data.diff}`;
+  }
+  if (cmd === '/log') {
+    if (data.error) return `Ошибка: ${data.error}`;
+    if (!data.commits || data.commits.length === 0) return 'Нет коммитов';
+    return 'Последние коммиты:\n' + data.commits.map(c => `  ${c.hash} ${c.message}`).join('\n');
+  }
+  if (cmd === '/files') {
+    if (data.error) return `Ошибка: ${data.error}`;
+    if (!data.files || data.files.length === 0) return 'Файлов нет';
+    const lines = data.files.slice(0, 50).map(f => `  ${f.path} (${f.size} B)`);
+    const more = data.files.length > 50 ? `\n  ... и ещё ${data.files.length - 50}` : '';
+    return `Файлов в проекте: ${data.total}\n${lines.join('\n')}${more}`;
+  }
+  return JSON.stringify(data, null, 2);
+}
+
+function handleHelpCommand(question) {
+  const parts = question.trim().split(/\s+/);
+  const topic = parts[1] || 'general';
+  const answer = HELP_TEXT[topic] || HELP_TEXT.general;
+  return {
+    answer,
+    mode: 'help',
+    sources: [],
+    citations: [],
+    confidenceScore: 1,
+    hasEnoughContext: true,
+    isDontKnow: false,
+    timing: { total: 0 },
+    usage: {},
+    pipeline: null,
+  };
+}
+
+// === MCP ===
+
+router.get('/mcp/tools', (req, res) => {
+  res.json({ success: true, data: mcpServer.getToolDefinitions() });
+});
+
+router.post('/mcp/call', async (req, res, next) => {
+  try {
+    const { tool } = req.body;
+    if (!tool) {
+      return res.status(400).json({ error: true, message: 'Поле "tool" обязательно' });
+    }
+    const result = await mcpServer.callTool(tool);
+    res.json({ success: true, data: result });
   } catch (err) {
     next(err);
   }

@@ -106,61 +106,6 @@ export class LlmClient {
     return res.answer.trim();
   }
 
-  async chatWithRag(question, retriever, augmenter, mode, options = {}) {
-    const start = Date.now();
-    const llmOpts = {
-      temperature: options.temperature || 0.3,
-      maxTokens: options.maxTokens || 2000,
-    };
-    const topK = options.topK || config.rag.topK;
-    const threshold = options.threshold != null ? options.threshold : config.rag.similarityThreshold;
-
-    let actualMode = mode;
-    let chunks = [];
-    const needsTranslation = this._hasCyrillic(question);
-    const searchQuery = needsTranslation ? await this.translateQuery(question) : question;
-    const searchOpts = { topK, threshold };
-    if (needsTranslation) {
-      searchOpts.additionalQueries = [question];
-    }
-
-    if (mode === 'auto') {
-      actualMode = this._detectMode(question);
-      if (actualMode === 'rag') {
-        chunks = await retriever.search(searchQuery, searchOpts);
-        if (chunks.length === 0) actualMode = 'no-rag';
-      }
-    } else if (mode === 'rag') {
-      chunks = await retriever.search(searchQuery, searchOpts);
-    }
-
-    const messages = augmenter.buildPrompt(question, chunks, actualMode);
-    const result = await this.chat(messages, llmOpts);
-
-    return {
-      answer: result.answer,
-      mode: actualMode,
-      searchQuery,
-      needsTranslation,
-      sources: chunks.map(c => ({
-        chunk_id: c.chunk_id,
-        filename: c.filename,
-        content: c.content.slice(0, 300),
-        similarity: c.similarity,
-        keywords_matched: (c._keywordScore?.matched || 0) + (c._contentKwMatches || 0),
-      })),
-      citations: [],
-      confidenceScore: 0,
-      hasEnoughContext: true,
-      isDontKnow: false,
-      timing: {
-        total: Date.now() - start,
-        llm: result.timing_ms,
-      },
-      usage: result.usage,
-    };
-  }
-
   _detectMode(question) {
     const q = question.toLowerCase();
 

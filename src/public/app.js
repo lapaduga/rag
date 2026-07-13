@@ -1,6 +1,7 @@
 const API = '/api';
 
 let documents = [];
+let documentsPath = '';
 
 async function apiFetch(url, options = {}) {
   const res = await fetch(`${API}${url}`, {
@@ -12,6 +13,15 @@ async function apiFetch(url, options = {}) {
   return data;
 }
 
+async function loadConfig() {
+  try {
+    const res = await apiFetch('/config');
+    if (res.success && res.data) {
+      documentsPath = res.data.documentsPath || '';
+    }
+  } catch {}
+}
+
 async function loadDocuments() {
   try {
     const res = await apiFetch('/documents');
@@ -21,14 +31,6 @@ async function loadDocuments() {
   } catch (err) {
     showError('Ошибка загрузки документов: ' + err.message);
   }
-}
-
-async function loadStats() {
-  try {
-    const res = await apiFetch('/stats');
-    const stats = res.data;
-    document.getElementById('doc-count').textContent = stats.documents;
-  } catch {}
 }
 
 async function startIndexing() {
@@ -74,7 +76,6 @@ async function startIndexing() {
           btn.disabled = false;
           playNotification();
           await loadDocuments();
-          await loadStats();
         }
       } catch {}
     }, 500);
@@ -82,7 +83,7 @@ async function startIndexing() {
   try {
     const res = await apiFetch('/index', {
       method: 'POST',
-      body: JSON.stringify({ path: 'C:\\defined\\front', strategy, maxFiles }),
+      body: JSON.stringify({ path: documentsPath || '.', strategy, maxFiles }),
     });
     const data = res.data;
 
@@ -109,11 +110,11 @@ async function compareStrategies() {
   try {
     const res = await apiFetch('/index/compare', {
       method: 'POST',
-      body: JSON.stringify({ path: 'C:\\defined\\front' }),
+      body: JSON.stringify({ path: documentsPath || '.' }),
     });
     renderComparison(res.data);
   } catch (err) {
-    panel.innerHTML = `<div class="empty-state">Ошибка: ${err.message}</div>`;
+    panel.innerHTML = `<div class="empty-state">Ошибка: ${escapeHtml(err.message)}</div>`;
   } finally {
     btn.disabled = false;
   }
@@ -321,6 +322,7 @@ async function pollSystemStats() {
   } catch {}
 }
 
+loadConfig();
 loadDocuments();
 pollSystemStats();
 setInterval(pollSystemStats, 2000);

@@ -6,7 +6,27 @@ export class Augmenter {
         return `[SOURCE_${idx}] [Файл: ${c.filename}] [Chunk: ${c.chunk_id}] [Section: ${meta?.section || 'other'}] [Title: ${meta?.title || 'untitled'}]\n${c.content}`;
       }).join('\n\n---\n\n');
 
-      let systemContent = `Ты — ассистент по кодовой базе. Отвечай на основе предоставленного контекста. Код в контексте — основной источник информации: если в коде есть классы, функции, импорты, шаблоны по теме вопроса — анализируй их и давай ответ. Не говори "не знаю", если в контексте есть релевантный код.`;
+      let systemContent = `Ты — ассистент-разработчик для проекта RAG Indexer. Отвечай на основе контекста и данных о проекте.`;
+
+      if (options.mcpTools) {
+        systemContent += `
+
+ДОСТУПНЫЕ ИНСТРУМЕНТЫ (вызывай через TOOL_CALL):
+${options.mcpTools}
+
+ФОРМАТ ВЫЗОВА:
+TOOL_CALL: {"tool": "имя_инструмента", "arguments": {}}
+
+ПРАВИЛА:
+- Вызывай инструменты ТОЛЬКО когда данные нужны для ответа и их нет в контексте.
+- Один TOOL_CALL в одном ответе.
+- После получения результата — ответь пользователю по-русски.
+- Не придумывай имена инструментов — используй ТОЛЬКО из списка выше.`;
+      }
+
+      if (options.mcpContext) {
+        systemContent += `\n\nДАННЫЕ ПРОЕКТА (актуальные):\n${options.mcpContext}`;
+      }
 
       if (options.memoryContext) {
         systemContent += options.memoryContext;
@@ -61,15 +81,31 @@ ${contextWithIds}
       ];
     }
 
+    let systemContent = 'Ты — ассистент. Ответь на вопрос на русском языке.';
+
+    if (options.mcpTools) {
+      systemContent += `
+
+ДОСТУПНЫЕ ИНСТРУМЕНТЫ (вызывай через TOOL_CALL):
+${options.mcpTools}
+
+ФОРМАТ ВЫЗОВА:
+TOOL_CALL: {"tool": "имя_инструмента", "arguments": {}}
+
+ПРАВИЛА:
+- Вызывай инструменты когда данные нужны для ответа.
+- Один TOOL_CALL в одном ответе.
+- После получения результата — ответь пользователю по-русски.
+- Не придумывай имена инструментов — используй ТОЛЬКО из списка выше.`;
+    }
+
+    if (options.mcpContext) {
+      systemContent += `\n\nДАННЫЕ ПРОЕКТА (актуальные):\n${options.mcpContext}`;
+    }
+
     return [
-      {
-        role: 'system',
-        content: 'Ты — ассистент. Ответь на вопрос на русском языке.'
-      },
-      {
-        role: 'user',
-        content: `Вопрос: ${question}`
-      }
+      { role: 'system', content: systemContent },
+      { role: 'user', content: `Вопрос: ${question}` }
     ];
   }
 }
