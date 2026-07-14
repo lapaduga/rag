@@ -338,7 +338,7 @@ function addWelcomeMessage() {
   const container = document.getElementById('messages');
   const div = document.createElement('div');
   div.className = 'message assistant';
-  div.innerHTML = `<div class="message-content"><p>${escapeHtml(greetingMessage)}</p><p class="help-hint"><code>/help</code> — справка · <code>/git</code> — ветка · <code>/diff</code> — изменения · <code>/log</code> — коммиты · <code>/files</code> — файлы</p></div>`;
+  div.innerHTML = `<div class="message-content"><p class="welcome-text">${escapeHtml(greetingMessage)}</p><p class="help-hint"><code>/help</code> — справка · <code>/git</code> — ветка · <code>/diff</code> — изменения · <code>/log</code> — коммиты · <code>/files</code> — файлы</p></div>`;
   container.appendChild(div);
 }
 
@@ -637,7 +637,7 @@ async function loadConfig() {
     }
     if (res.success && res.data.greeting) {
       greetingMessage = res.data.greeting;
-      const welcomeEl = document.querySelector('.message.assistant .message-content p:first-of-type');
+      const welcomeEl = document.querySelector('.welcome-text');
       if (welcomeEl) welcomeEl.textContent = greetingMessage;
     }
   } catch (e) {
