@@ -4,6 +4,7 @@ let currentProvider = 'deepseek';
 let pipelineConfigOpen = false;
 let currentThreadId = null;
 let threads = [];
+let greetingMessage = 'Привет! Я — ассистент по кодовой базе. Задай вопрос о проекте.';
 
 const $ = id => document.getElementById(id);
 
@@ -337,7 +338,7 @@ function addWelcomeMessage() {
   const container = document.getElementById('messages');
   const div = document.createElement('div');
   div.className = 'message assistant';
-  div.innerHTML = `<div class="message-content"><p>Привет! Я — ассистент по кодовой базе. Задай вопрос о проекте.</p><p class="help-hint"><code>/help</code> — справка · <code>/git</code> — ветка · <code>/diff</code> — изменения · <code>/log</code> — коммиты · <code>/files</code> — файлы</p></div>`;
+  div.innerHTML = `<div class="message-content"><p class="welcome-text">${escapeHtml(greetingMessage)}</p><p class="help-hint"><code>/help</code> — справка · <code>/git</code> — ветка · <code>/diff</code> — изменения · <code>/log</code> — коммиты · <code>/files</code> — файлы</p></div>`;
   container.appendChild(div);
 }
 
@@ -634,12 +635,18 @@ async function loadConfig() {
         b.classList.toggle('active', b.dataset.provider === currentProvider);
       });
     }
+    if (res.success && res.data.greeting) {
+      greetingMessage = res.data.greeting;
+      const welcomeEl = document.querySelector('.welcome-text');
+      if (welcomeEl) welcomeEl.textContent = greetingMessage;
+    }
   } catch (e) {
     console.warn('Failed to load config:', e);
   }
 }
 
 (async () => {
+  document.querySelector('.welcome-text').textContent = greetingMessage;
   await loadConfig();
   loadThreads();
 })();

@@ -68,6 +68,8 @@ export const config = {
     memoryExtractionEnabled: process.env.PIPELINE_MEMORY_EXTRACTION === 'true',
   },
 
+  greeting: process.env.GREETING_MESSAGE || 'Привет! Я — ассистент по кодовой базе. Задай вопрос о проекте.',
+
   rag: {
     topK: parseInt(process.env.RAG_TOP_K, 10) || 15,
     similarityThreshold: parseFloat(process.env.RAG_SIMILARITY_THRESHOLD) || 0.3,

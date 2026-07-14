@@ -301,6 +301,12 @@ async function main() {
   if (prContext) {
     baseBranch = prContext.base.ref;
     prNumber = prContext.number;
+
+    try {
+      git(['rev-parse', '--verify', baseBranch]);
+    } catch {
+      baseBranch = `origin/${baseBranch}`;
+    }
     console.log(`PR #${prNumber}: ${prContext.title}`);
     console.log(`Base: ${baseBranch} ← Head: ${prContext.head.ref}\n`);
   } else {
