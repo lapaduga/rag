@@ -1,0 +1,38 @@
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run AI Code Review
+        run: node scripts/code-review.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHAT_API_KEY: ${{ secrets.CHAT_API_KEY }}
+          CHAT_MODEL: ${{ vars.CHAT_MODEL || 'deepseek-v4-pro' }}
+          CHAT_BASE_URL: ${{ vars.CHAT_BASE_URL || 'https://api.deepseek.com' }}
+          LLM_PROVIDER: deepseek

@@ -40,7 +40,7 @@ export const config = {
 
   chat: {
     apiKey: process.env.CHAT_API_KEY || process.env.EMBEDDING_API_KEY || '',
-    model: process.env.CHAT_MODEL || 'deepseek-chat',
+    model: process.env.CHAT_MODEL || 'deepseek-v4-pro',
     baseUrl: process.env.CHAT_BASE_URL || 'https://api.deepseek.com',
   },
 
