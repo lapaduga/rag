@@ -67,6 +67,7 @@ router.get('/config', (req, res) => {
       localModel: config.localLlm.model,
       deepseekModel: config.chat.model,
       documentsPath: config.documents.path,
+      greeting: config.greeting,
     },
   });
 });
