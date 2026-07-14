@@ -646,6 +646,7 @@ async function loadConfig() {
 }
 
 (async () => {
+  document.querySelector('.welcome-text').textContent = greetingMessage;
   await loadConfig();
   loadThreads();
 })();
