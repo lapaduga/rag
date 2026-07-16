@@ -210,10 +210,14 @@ router.post('/query', async (req, res, next) => {
       '/diff': 'get_git_diff',
       '/files': 'list_project_files',
       '/log': 'get_git_log',
+      '/read': 'read_file',
+      '/search': 'search_in_files',
     };
-    const cmd = question.trim().toLowerCase().split(/\s+/)[0];
+    const firstWord = question.trim().split(/\s+/)[0] || '';
+    const cmd = firstWord.toLowerCase();
     if (MCP_COMMANDS[cmd]) {
-      const mcpResult = await mcpServer.callTool(MCP_COMMANDS[cmd]);
+      const args = parseMcpArgs(question, firstWord);
+      const mcpResult = await mcpServer.callTool(MCP_COMMANDS[cmd], args);
       const answer = mcpResult.error
         ? `Ошибка: ${mcpResult.error}`
         : formatMcpResult(cmd, mcpResult);
@@ -414,6 +418,13 @@ const HELP_TEXT = {
 • /log — последние 10 коммитов
 • /files — список файлов проекта
 
+ФАЙЛОВЫЕ ИНСТРУМЕНТЫ:
+• /read <путь> [строки] — чтение файла (например: /read static/es6/init.js 1-50)
+• /search <паттерн> — поиск по кодовой базе (regex)
+• write_file, edit_file, generate_diff — доступны через TOOL_CALL в pipeline
+
+ЦЕЛЕВОЙ ПРОЕКТ: настраивается через TARGET_PROJECT_PATH в .env
+
 КАК ЗАДАВАТЬ ВОПРОСЫ:
 Просто напишите вопрос о проекте. Например:
 • "Как работает retriever?"
@@ -523,6 +534,24 @@ TASK_MEMORY — память задачи
 `,
 };
 
+function parseMcpArgs(question, cmd) {
+  const rest = question.trim().slice(cmd.length).trim();
+  if (cmd === '/read') {
+    const parts = rest.split(/\s+/);
+    const path = parts[0] || '';
+    const opts = {};
+    for (let i = 1; i < parts.length; i++) {
+      const m = parts[i].match(/^(\d+)-(\d+)$/);
+      if (m) { opts.startLine = parseInt(m[1], 10); opts.endLine = parseInt(m[2], 10); }
+    }
+    return { path, ...opts };
+  }
+  if (cmd === '/search') {
+    return { pattern: rest };
+  }
+  return {};
+}
+
 function formatMcpResult(cmd, data) {
   if (cmd === '/git') {
     if (data.error) return `Ошибка: ${data.error}`;
@@ -544,6 +573,18 @@ function formatMcpResult(cmd, data) {
     const lines = data.files.slice(0, 50).map(f => `  ${f.path} (${f.size} B)`);
     const more = data.files.length > 50 ? `\n  ... и ещё ${data.files.length - 50}` : '';
     return `Файлов в проекте: ${data.total}\n${lines.join('\n')}${more}`;
+  }
+  if (cmd === '/read') {
+    if (data.error) return `Ошибка: ${data.error}`;
+    const header = `${data.path} (${data.startLine}-${data.endLine} из ${data.totalLines} строк)${data.truncated ? ' [обрезано]' : ''}`;
+    return `${header}\n${'─'.repeat(60)}\n${data.content}`;
+  }
+  if (cmd === '/search') {
+    if (data.error) return `Ошибка: ${data.error}`;
+    if (data.results.length === 0) return `По паттерну "${data.pattern}" ничего не найдено`;
+    const lines = data.results.map(r => `  ${r.file}:${r.line} — ${r.content}`);
+    const more = data.truncated ? `\n  ... показаны первые ${data.total} из ${data.limit}+` : '';
+    return `Найдено: ${data.total} совпадений по "${data.pattern}"\n${lines.join('\n')}${more}`;
   }
   return JSON.stringify(data, null, 2);
 }
@@ -574,11 +615,11 @@ router.get('/mcp/tools', (req, res) => {
 
 router.post('/mcp/call', async (req, res, next) => {
   try {
-    const { tool } = req.body;
+    const { tool, args } = req.body;
     if (!tool) {
       return res.status(400).json({ error: true, message: 'Поле "tool" обязательно' });
     }
-    const result = await mcpServer.callTool(tool);
+    const result = await mcpServer.callTool(tool, args || {});
     res.json({ success: true, data: result });
   } catch (err) {
     next(err);
