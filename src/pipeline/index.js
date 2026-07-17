@@ -3,7 +3,7 @@ import { MemoryManager } from '../memory/index.js';
 import { McpServer } from '../mcp/index.js';
 import { config as appConfig } from '../config.js';
 
-const MAX_AGENT_STEPS = 10;
+const MAX_AGENT_STEPS = 5;
 
 function parseToolCalls(reply) {
   const results = [];
@@ -52,7 +52,7 @@ export class RagPipeline {
   }
 
   async _executeTool(toolName, args) {
-    const result = await this.mcpServer.callTool(toolName, args);
+    const result = await this.mcpServer.callTool(toolName);
     if (result.error) return `Ошибка: ${result.error}`;
     return JSON.stringify(result, null, 2);
   }
@@ -219,14 +219,14 @@ export class RagPipeline {
 
         conversationHistory.push({
           role: 'system',
-          content: `Результат вызова "${toolName}":\n${toolResult}\n\nЕсли задача решена — ответь пользователю по-русски. Если нужен ещё один инструмент — вызови его через TOOL_CALL.\nЕсли это read_file/search_in_files — проанализируй результат и продолжи цепочку.`,
+          content: `Результат вызова "${toolName}":\n${toolResult}\n\nЕсли задача решена — ответь пользователю по-русски. Если нужен ещё один инструмент — вызови его через TOOL_CALL.`,
         });
       }
     }
 
     const finalMessages = [
       ...conversationHistory,
-      { role: 'system', content: 'Достигнут лимит шагов (10). Подведи итог пользователю по-русски. Используй все собранные данные для формирования полного ответа.' },
+      { role: 'system', content: 'Достигнут лимит шагов (5). Подведи итог пользователю по-русски.' },
     ];
     const tFinal = Date.now();
     const finalResult = await this.llm.chat(finalMessages);

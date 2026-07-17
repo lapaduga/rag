@@ -68,19 +68,6 @@ export const config = {
     memoryExtractionEnabled: process.env.PIPELINE_MEMORY_EXTRACTION === 'true',
   },
 
-  target: {
-    path: process.env.TARGET_PROJECT_PATH || resolve(__dirname, '..', '..'),
-    readOnly: process.env.TARGET_READ_ONLY !== 'false',
-    sensitiveFiles: (process.env.TARGET_SENSITIVE_FILES || 'server.key,xip.io.crt,.sentryclirc,tt-site-settings.js,.env,.env.local,.env.production')
-      .split(',').map(s => s.trim()).filter(Boolean),
-    sensitiveDirs: (process.env.TARGET_SENSITIVE_DIRS || '.ssh,extraData,tmp')
-      .split(',').map(s => s.trim()).filter(Boolean),
-    ignoreDirs: (process.env.TARGET_IGNORE_DIRS || 'node_modules,.git,dist,build,coverage,.nyc_output,__pycache__,bower_components')
-      .split(',').map(s => s.trim()).filter(Boolean),
-    maxReadLines: parseInt(process.env.TARGET_MAX_READ_LINES, 10) || 500,
-    maxSearchResults: parseInt(process.env.TARGET_MAX_SEARCH_RESULTS, 10) || 100,
-  },
-
   greeting: process.env.GREETING_MESSAGE || 'Привет! Я — ассистент по кодовой базе. Задай вопрос о проекте.',
 
   rag: {
